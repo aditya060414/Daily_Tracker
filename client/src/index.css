@@ -1,0 +1,89 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    background-color: #0f0f0f;
+    color: #e8e8e8;
+    font-family: 'Geist', 'Inter', system-ui, sans-serif;
+  }
+
+  h1, h2, h3, h4, h5, h6, .font-mono-all {
+    font-family: 'Geist Mono', 'JetBrains Mono', monospace;
+  }
+}
+
+/* Custom Scrollbar Styles for Terminal/Linear Feel */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+
+::-webkit-scrollbar-track {
+  background: #0f0f0f;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #2a2a2a;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #7c3aed;
+}
+
+/* Checkbox pop micro-animation */
+@keyframes pop-check {
+  0% {
+    transform: scale(0.85);
+  }
+  50% {
+    transform: scale(1.1);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+.animate-pop {
+  animation: pop-check 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+}
+
+/* Fade-in for loaders and transitions */
+@keyframes fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-in {
+  animation: fade-in 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* Glow highlights */
+.glow-accent {
+  box-shadow: 0 0 15px rgba(124, 58, 237, 0.15);
+}
+
+.glow-accent-strong {
+  box-shadow: 0 0 25px rgba(124, 58, 237, 0.3);
+}
+
+/* Custom class for panels with Notion style border */
+.panel-card {
+  @apply bg-panel border border-border rounded-lg p-5 transition-all duration-200;
+}
+
+.panel-card-hover {
+  @apply hover:border-accent/40;
+}
+
+.panel-card-hover:hover {
+  box-shadow: 0 0 15px rgba(124, 58, 237, 0.15);
+}

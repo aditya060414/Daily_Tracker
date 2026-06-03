@@ -1,0 +1,210 @@
+import axios from 'axios';
+import { useAuthStore } from '../store';
+import {
+  TaskTemplate,
+  DailyLog,
+  GymSession,
+  DayPlan,
+  Goal,
+  Meal,
+  DayReview,
+  User,
+  TimeBlock,
+  GymExercise,
+  MealItem,
+} from '../types';
+
+const api = axios.create({
+  baseURL: '/api/v1',
+  headers: {
+    'Content-Type': 'application/json',
+  },
+});
+
+// Request interceptor to attach JWT token
+api.interceptors.request.use(
+  (config) => {
+    const token = useAuthStore.getState().token;
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+    return config;
+  },
+  (error) => {
+    return Promise.reject(error);
+  }
+);
+
+// Unified server response format
+export interface ApiResponse<T> {
+  success: boolean;
+  data: T;
+  error?: string;
+}
+
+export const authApi = {
+  login: async (username: string, password: string) => {
+    const res = await api.post<ApiResponse<{ token: string; user: User }>>('/auth/login', {
+      username,
+      password,
+    });
+    return res.data;
+  },
+  register: async (username: string, password: string) => {
+    const res = await api.post<ApiResponse<{ token: string; user: User }>>('/auth/register', {
+      username,
+      password,
+    });
+    return res.data;
+  },
+  me: async () => {
+    const res = await api.get<ApiResponse<{ user: User }>>('/auth/me');
+    return res.data;
+  },
+};
+
+export const dailyTasksApi = {
+  getAll: async () => {
+    const res = await api.get<ApiResponse<TaskTemplate[]>>('/daily-tasks');
+    return res.data;
+  },
+  create: async (task: Omit<TaskTemplate, '_id'>) => {
+    const res = await api.post<ApiResponse<TaskTemplate>>('/daily-tasks', task);
+    return res.data;
+  },
+  update: async (id: string, task: Partial<Omit<TaskTemplate, '_id'>>) => {
+    const res = await api.put<ApiResponse<TaskTemplate>>(`/daily-tasks/${id}`, task);
+    return res.data;
+  },
+  delete: async (id: string) => {
+    const res = await api.delete<ApiResponse<{ id: string }>>(`/daily-tasks/${id}`);
+    return res.data;
+  },
+};
+
+export const dailyLogsApi = {
+  get: async (date: string) => {
+    const res = await api.get<ApiResponse<DailyLog>>(`/daily-logs/${date}`);
+    return res.data;
+  },
+  addOneOff: async (date: string, task: { title: string; points: number; category: string }) => {
+    const res = await api.post<ApiResponse<DailyLog>>(`/daily-logs/${date}`, task);
+    return res.data;
+  },
+  toggleTask: async (date: string, logTaskId: string, completed: boolean) => {
+    const res = await api.patch<ApiResponse<DailyLog>>(`/daily-logs/${date}`, {
+      logTaskId,
+      completed,
+    });
+    return res.data;
+  },
+  deleteTask: async (date: string, logTaskId: string) => {
+    const res = await api.delete<ApiResponse<DailyLog>>(`/daily-logs/${date}/${logTaskId}`);
+    return res.data;
+  },
+};
+
+export const gymApi = {
+  get: async (date: string) => {
+    const res = await api.get<ApiResponse<GymSession | null>>(`/gym/${date}`);
+    return res.data;
+  },
+  upsert: async (
+    date: string,
+    data: { exercises: GymExercise[]; durationMinutes: number; notes: string }
+  ) => {
+    const res = await api.put<ApiResponse<GymSession>>(`/gym/${date}`, data);
+    return res.data;
+  },
+  delete: async (date: string) => {
+    const res = await api.delete<ApiResponse<{ date: string }>>(`/gym/${date}`);
+    return res.data;
+  },
+  list: async (startDate?: string, endDate?: string) => {
+    const res = await api.get<ApiResponse<GymSession[]>>('/gym', {
+      params: { startDate, endDate },
+    });
+    return res.data;
+  },
+};
+
+export const dayPlanApi = {
+  get: async (date: string) => {
+    const res = await api.get<ApiResponse<DayPlan>>(`/day-plan/${date}`);
+    return res.data;
+  },
+  upsert: async (date: string, timeBlocks?: TimeBlock[], notes?: string) => {
+    const res = await api.put<ApiResponse<DayPlan>>(`/day-plan/${date}`, { timeBlocks, notes });
+    return res.data;
+  },
+  copy: async (date: string, sourceDate: string) => {
+    const res = await api.post<ApiResponse<DayPlan>>(`/day-plan/${date}/copy-from/${sourceDate}`);
+    return res.data;
+  },
+};
+
+export const goalsApi = {
+  getAll: async () => {
+    const res = await api.get<ApiResponse<Goal[]>>('/goals');
+    return res.data;
+  },
+  create: async (goal: Omit<Goal, '_id' | 'progress' | 'progressHistory'>) => {
+    const res = await api.post<ApiResponse<Goal>>('/goals', goal);
+    return res.data;
+  },
+  update: async (id: string, goal: Partial<Goal>) => {
+    const res = await api.put<ApiResponse<Goal>>(`/goals/${id}`, goal);
+    return res.data;
+  },
+  updateProgress: async (id: string, progress: number) => {
+    const res = await api.patch<ApiResponse<Goal>>(`/goals/${id}/progress`, { progress });
+    return res.data;
+  },
+  delete: async (id: string) => {
+    const res = await api.delete<ApiResponse<{ id: string }>>(`/goals/${id}`);
+    return res.data;
+  },
+};
+
+export const mealsApi = {
+  get: async (date: string) => {
+    const res = await api.get<ApiResponse<Meal[]>>(`/meals/${date}`);
+    return res.data;
+  },
+  upsert: async (
+    date: string,
+    mealType: 'breakfast' | 'lunch' | 'dinner' | 'snack',
+    items: MealItem[]
+  ) => {
+    const res = await api.put<ApiResponse<Meal[]>>(`/meals/${date}`, { mealType, items });
+    return res.data;
+  },
+  delete: async (date: string, mealType: 'breakfast' | 'lunch' | 'dinner' | 'snack') => {
+    const res = await api.delete<ApiResponse<Meal[]>>(`/meals/${date}/${mealType}`);
+    return res.data;
+  },
+};
+
+export const reviewsApi = {
+  getAll: async () => {
+    const res = await api.get<ApiResponse<DayReview[]>>('/reviews');
+    return res.data;
+  },
+  get: async (date: string) => {
+    const res = await api.get<ApiResponse<DayReview | null>>(`/reviews/${date}`);
+    return res.data;
+  },
+  patch: async (date: string, review: Partial<Omit<DayReview, '_id' | 'wordCount'>>) => {
+    const res = await api.patch<ApiResponse<DayReview>>(`/reviews/${date}`, review);
+    return res.data;
+  },
+};
+
+export const analyticsApi = {
+  getPoints: async (range: 7 | 14 | 30) => {
+    const res = await api.get<ApiResponse<{ date: string; points: number }[]>>('/analytics/points', {
+      params: { range },
+    });
+    return res.data;
+  },
+};

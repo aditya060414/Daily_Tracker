@@ -1,0 +1,646 @@
+import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
+import { format, addDays, parseISO } from 'date-fns';
+import {
+  User,
+  TaskTemplate,
+  DailyLog,
+  GymSession,
+  DayPlan,
+  Goal,
+  Meal,
+  DayReview,
+  TimeBlock,
+  GymExercise,
+  MealItem,
+} from '../types';
+import {
+  dailyTasksApi,
+  dailyLogsApi,
+  gymApi,
+  dayPlanApi,
+  goalsApi,
+  mealsApi,
+  reviewsApi,
+} from '../api';
+
+// ----------------------------------------------------
+// AUTH STORE
+// ----------------------------------------------------
+interface AuthState {
+  token: string | null;
+  user: User | null;
+  isAuthenticated: boolean;
+  setAuth: (token: string, user: User) => void;
+  clearAuth: () => void;
+}
+
+export const useAuthStore = create<AuthState>()(
+  persist(
+    (set) => ({
+      token: null,
+      user: null,
+      isAuthenticated: false,
+      setAuth: (token, user) => set({ token, user, isAuthenticated: true }),
+      clearAuth: () => set({ token: null, user: null, isAuthenticated: false }),
+    }),
+    {
+      name: 'dailyos-auth',
+    }
+  )
+);
+
+// ----------------------------------------------------
+// DATE STORE (Global selected date synchronizer)
+// ----------------------------------------------------
+interface DateState {
+  selectedDate: string; // YYYY-MM-DD
+  setSelectedDate: (date: string) => void;
+  nextDay: () => void;
+  prevDay: () => void;
+  setToday: () => void;
+}
+
+export const useDateStore = create<DateState>((set) => ({
+  selectedDate: format(new Date(), 'yyyy-MM-dd'),
+  setSelectedDate: (date) => set({ selectedDate: date }),
+  nextDay: () =>
+    set((state) => {
+      const current = parseISO(state.selectedDate);
+      return { selectedDate: format(addDays(current, 1), 'yyyy-MM-dd') };
+    }),
+  prevDay: () =>
+    set((state) => {
+      const current = parseISO(state.selectedDate);
+      return { selectedDate: format(addDays(current, -1), 'yyyy-MM-dd') };
+    }),
+  setToday: () => set({ selectedDate: format(new Date(), 'yyyy-MM-dd') }),
+}));
+
+// ----------------------------------------------------
+// DAILY TASKS & LOGS STORE (With Optimistic UI Updates)
+// ----------------------------------------------------
+interface DailyState {
+  taskTemplates: TaskTemplate[];
+  dailyLog: DailyLog | null;
+  loading: boolean;
+  error: string | null;
+  fetchTemplates: () => Promise<void>;
+  createTemplate: (task: Omit<TaskTemplate, '_id'>) => Promise<void>;
+  updateTemplate: (id: string, task: Partial<Omit<TaskTemplate, '_id'>>) => Promise<void>;
+  deleteTemplate: (id: string) => Promise<void>;
+  fetchLog: (date: string) => Promise<void>;
+  addOneOffTask: (date: string, task: { title: string; points: number; category: any }) => Promise<void>;
+  toggleLogTask: (date: string, logTaskId: string, completed: boolean) => Promise<void>;
+  deleteLogTask: (date: string, logTaskId: string) => Promise<void>;
+}
+
+export const useDailyStore = create<DailyState>((set, get) => ({
+  taskTemplates: [],
+  dailyLog: null,
+  loading: false,
+  error: null,
+
+  fetchTemplates: async () => {
+    set({ loading: true, error: null });
+    try {
+      const res = await dailyTasksApi.getAll();
+      set({ taskTemplates: res.data, loading: false });
+    } catch (err: any) {
+      set({ error: err.response?.data?.error || 'Failed to fetch task templates', loading: false });
+    }
+  },
+
+  createTemplate: async (task) => {
+    try {
+      const res = await dailyTasksApi.create(task);
+      set((state) => ({ taskTemplates: [res.data, ...state.taskTemplates] }));
+    } catch (err: any) {
+      set({ error: err.response?.data?.error || 'Failed to create task template' });
+    }
+  },
+
+  updateTemplate: async (id, task) => {
+    try {
+      const res = await dailyTasksApi.update(id, task);
+      set((state) => ({
+        taskTemplates: state.taskTemplates.map((t) => (t._id === id ? res.data : t)),
+      }));
+    } catch (err: any) {
+      set({ error: err.response?.data?.error || 'Failed to update task template' });
+    }
+  },
+
+  deleteTemplate: async (id) => {
+    try {
+      await dailyTasksApi.delete(id);
+      set((state) => ({
+        taskTemplates: state.taskTemplates.filter((t) => t._id !== id),
+      }));
+    } catch (err: any) {
+      set({ error: err.response?.data?.error || 'Failed to delete task template' });
+    }
+  },
+
+  fetchLog: async (date) => {
+    set({ loading: true, error: null });
+    try {
+      const res = await dailyLogsApi.get(date);
+      set({ dailyLog: res.data, loading: false });
+    } catch (err: any) {
+      set({ error: err.response?.data?.error || 'Failed to fetch daily log', loading: false });
+    }
+  },
+
+  addOneOffTask: async (date, task) => {
+    try {
+      const res = await dailyLogsApi.addOneOff(date, task);
+      set({ dailyLog: res.data });
+    } catch (err: any) {
+      set({ error: err.response?.data?.error || 'Failed to add one-off task' });
+    }
+  },
+
+  toggleLogTask: async (date, logTaskId, completed) => {
+    const previousLog = get().dailyLog;
+    if (!previousLog) return;
+
+    // OPTIMISTIC UPDATE:
+    // Update local state immediately
+    const updatedTasks = previousLog.tasks.map((task) => {
+      if (task._id === logTaskId) {
+        return {
+          ...task,
+          completed,
+          completedAt: completed ? new Date().toISOString() : undefined,
+        };
+      }
+      return task;
+    });
+
+    const newPoints = updatedTasks.reduce((sum, task) => {
+      return sum + (task.completed ? task.points : 0);
+    }, 0);
+
+    const optimisticLog = {
+      ...previousLog,
+      tasks: updatedTasks,
+      totalPoints: newPoints,
+    };
+
+    set({ dailyLog: optimisticLog });
+
+    // Sync to Server
+    try {
+      const res = await dailyLogsApi.toggleTask(date, logTaskId, completed);
+      set({ dailyLog: res.data }); // update with database final response
+    } catch (err: any) {
+      // Rollback on failure
+      set({ dailyLog: previousLog, error: 'Failed to sync check box toggle. Restored original state.' });
+    }
+  },
+
+  deleteLogTask: async (date, logTaskId) => {
+    try {
+      const res = await dailyLogsApi.deleteTask(date, logTaskId);
+      set({ dailyLog: res.data });
+    } catch (err: any) {
+      set({ error: err.response?.data?.error || 'Failed to delete task from checklist' });
+    }
+  },
+}));
+
+// ----------------------------------------------------
+// GYM STORE
+// ----------------------------------------------------
+interface GymState {
+  session: GymSession | null;
+  weeklySessions: GymSession[];
+  loading: boolean;
+  error: string | null;
+  fetchSession: (date: string) => Promise<void>;
+  fetchWeeklySessions: (startDate: string, endDate: string) => Promise<void>;
+  saveSession: (
+    date: string,
+    data: { exercises: GymExercise[]; durationMinutes: number; notes: string }
+  ) => Promise<void>;
+  deleteSession: (date: string) => Promise<void>;
+}
+
+export const useGymStore = create<GymState>((set) => ({
+  session: null,
+  weeklySessions: [],
+  loading: false,
+  error: null,
+
+  fetchSession: async (date) => {
+    set({ loading: true, error: null });
+    try {
+      const res = await gymApi.get(date);
+      set({ session: res.data, loading: false });
+    } catch (err: any) {
+      set({ error: err.response?.data?.error || 'Failed to fetch gym session', loading: false });
+    }
+  },
+
+  fetchWeeklySessions: async (startDate, endDate) => {
+    try {
+      const res = await gymApi.list(startDate, endDate);
+      set({ weeklySessions: res.data });
+    } catch (err: any) {
+      set({ error: err.response?.data?.error || 'Failed to fetch weekly workout summary' });
+    }
+  },
+
+  saveSession: async (date, data) => {
+    set({ loading: true, error: null });
+    try {
+      const res = await gymApi.upsert(date, data);
+      set({ session: res.data, loading: false });
+    } catch (err: any) {
+      set({ error: err.response?.data?.error || 'Failed to save workout session', loading: false });
+    }
+  },
+
+  deleteSession: async (date) => {
+    set({ loading: true, error: null });
+    try {
+      await gymApi.delete(date);
+      set({ session: null, loading: false });
+    } catch (err: any) {
+      set({ error: err.response?.data?.error || 'Failed to delete gym session', loading: false });
+    }
+  },
+}));
+
+// ----------------------------------------------------
+// DAY PLANNING STORE
+// ----------------------------------------------------
+interface DayPlanState {
+  plan: DayPlan | null;
+  tomorrowPlan: DayPlan | null;
+  loading: boolean;
+  error: string | null;
+  fetchPlan: (date: string) => Promise<void>;
+  savePlan: (date: string, timeBlocks?: TimeBlock[], notes?: string) => Promise<void>;
+  saveTomorrowPlan: (date: string, timeBlocks?: TimeBlock[], notes?: string) => Promise<void>;
+  copyPlan: (date: string, sourceDate: string) => Promise<void>;
+}
+
+export const useDayPlanStore = create<DayPlanState>((set) => ({
+  plan: null,
+  tomorrowPlan: null,
+  loading: false,
+  error: null,
+
+  fetchPlan: async (date) => {
+    set({ loading: true, error: null });
+    try {
+      const res = await dayPlanApi.get(date);
+      const parsedToday = parseISO(date);
+      const tomorrowDateStr = format(addDays(parsedToday, 1), 'yyyy-MM-dd');
+      const resTomorrow = await dayPlanApi.get(tomorrowDateStr);
+      set({ plan: res.data, tomorrowPlan: resTomorrow.data, loading: false });
+    } catch (err: any) {
+      set({ error: err.response?.data?.error || 'Failed to fetch day schedule', loading: false });
+    }
+  },
+
+  savePlan: async (date, timeBlocks, notes) => {
+    set({ loading: true, error: null });
+    try {
+      const res = await dayPlanApi.upsert(date, timeBlocks, notes);
+      set({ plan: res.data, loading: false });
+    } catch (err: any) {
+      set({ error: err.response?.data?.error || 'Failed to save schedule', loading: false });
+    }
+  },
+
+  saveTomorrowPlan: async (date, timeBlocks, notes) => {
+    try {
+      const res = await dayPlanApi.upsert(date, timeBlocks, notes);
+      set({ tomorrowPlan: res.data });
+    } catch (err: any) {
+      set({ error: err.response?.data?.error || 'Failed to save tomorrow schedule' });
+    }
+  },
+
+  copyPlan: async (date, sourceDate) => {
+    set({ loading: true, error: null });
+    try {
+      const res = await dayPlanApi.copy(date, sourceDate);
+      set({ plan: res.data, loading: false });
+    } catch (err: any) {
+      set({ error: err.response?.data?.error || 'Failed to copy plan from yesterday', loading: false });
+    }
+  },
+}));
+
+// ----------------------------------------------------
+// GOALS STORE
+// ----------------------------------------------------
+interface GoalsState {
+  goals: Goal[];
+  loading: boolean;
+  error: string | null;
+  fetchGoals: () => Promise<void>;
+  createGoal: (goal: Omit<Goal, '_id' | 'progress' | 'progressHistory'>) => Promise<void>;
+  updateGoal: (id: string, goal: Partial<Goal>) => Promise<void>;
+  updateGoalProgress: (id: string, progress: number) => Promise<void>;
+  deleteGoal: (id: string) => Promise<void>;
+}
+
+export const useGoalsStore = create<GoalsState>((set) => ({
+  goals: [],
+  loading: false,
+  error: null,
+
+  fetchGoals: async () => {
+    set({ loading: true, error: null });
+    try {
+      const res = await goalsApi.getAll();
+      set({ goals: res.data, loading: false });
+    } catch (err: any) {
+      set({ error: err.response?.data?.error || 'Failed to fetch goals', loading: false });
+    }
+  },
+
+  createGoal: async (goal) => {
+    set({ loading: true, error: null });
+    try {
+      const res = await goalsApi.create(goal);
+      set((state) => ({ goals: [res.data, ...state.goals], loading: false }));
+    } catch (err: any) {
+      set({ error: err.response?.data?.error || 'Failed to create goal', loading: false });
+    }
+  },
+
+  updateGoal: async (id, goal) => {
+    try {
+      const res = await goalsApi.update(id, goal);
+      set((state) => ({
+        goals: state.goals.map((g) => (g._id === id ? res.data : g)),
+      }));
+    } catch (err: any) {
+      set({ error: err.response?.data?.error || 'Failed to update goal' });
+    }
+  },
+
+  updateGoalProgress: async (id, progress) => {
+    // Optimistically update goals list
+    set((state) => ({
+      goals: state.goals.map((g) => {
+        if (g._id === id) {
+          const todayStr = format(new Date(), 'yyyy-MM-dd');
+          const exists = g.progressHistory.some((s) => s.date === todayStr);
+          const newHistory = exists
+            ? g.progressHistory.map((s) => (s.date === todayStr ? { ...s, progress } : s))
+            : [...g.progressHistory, { date: todayStr, progress }];
+          return {
+            ...g,
+            progress,
+            status: progress === 100 ? 'completed' : g.status === 'completed' ? 'active' : g.status,
+            progressHistory: newHistory,
+          };
+        }
+        return g;
+      }),
+    }));
+
+    try {
+      const res = await goalsApi.updateProgress(id, progress);
+      set((state) => ({
+        goals: state.goals.map((g) => (g._id === id ? res.data : g)),
+      }));
+    } catch (err: any) {
+      set({ error: err.response?.data?.error || 'Failed to save progress update' });
+      // Refetch all to sync back on error
+      const res = await goalsApi.getAll();
+      set({ goals: res.data });
+    }
+  },
+
+  deleteGoal: async (id) => {
+    try {
+      await goalsApi.delete(id);
+      set((state) => ({ goals: state.goals.filter((g) => g._id !== id) }));
+    } catch (err: any) {
+      set({ error: err.response?.data?.error || 'Failed to delete goal' });
+    }
+  },
+}));
+
+// ----------------------------------------------------
+// MEALS STORE
+// ----------------------------------------------------
+interface MealsState {
+  meals: Meal[];
+  loading: boolean;
+  error: string | null;
+  fetchMeals: (date: string) => Promise<void>;
+  saveMeal: (
+    date: string,
+    mealType: 'breakfast' | 'lunch' | 'dinner' | 'snack',
+    items: MealItem[]
+  ) => Promise<void>;
+  deleteMeal: (date: string, mealType: 'breakfast' | 'lunch' | 'dinner' | 'snack') => Promise<void>;
+}
+
+export const useMealsStore = create<MealsState>((set) => ({
+  meals: [],
+  loading: false,
+  error: null,
+
+  fetchMeals: async (date) => {
+    set({ loading: true, error: null });
+    try {
+      const res = await mealsApi.get(date);
+      set({ meals: res.data, loading: false });
+    } catch (err: any) {
+      set({ error: err.response?.data?.error || 'Failed to fetch meal log', loading: false });
+    }
+  },
+
+  saveMeal: async (date, mealType, items) => {
+    set({ loading: true, error: null });
+    try {
+      const res = await mealsApi.upsert(date, mealType, items);
+      set({ meals: res.data, loading: false });
+    } catch (err: any) {
+      set({ error: err.response?.data?.error || 'Failed to save meal', loading: false });
+    }
+  },
+
+  deleteMeal: async (date, mealType) => {
+    set({ loading: true, error: null });
+    try {
+      const res = await mealsApi.delete(date, mealType);
+      set({ meals: res.data, loading: false });
+    } catch (err: any) {
+      set({ error: err.response?.data?.error || 'Failed to clear meal', loading: false });
+    }
+  },
+}));
+
+// ----------------------------------------------------
+// DAY REVIEWS STORE
+// ----------------------------------------------------
+interface ReviewsState {
+  currentReview: DayReview | null;
+  allReviews: DayReview[];
+  loading: boolean;
+  error: string | null;
+  fetchReview: (date: string) => Promise<void>;
+  fetchAllReviews: () => Promise<void>;
+  saveReview: (date: string, reviewData: Partial<Omit<DayReview, '_id' | 'wordCount'>>) => Promise<void>;
+}
+
+export const useReviewsStore = create<ReviewsState>((set) => ({
+  currentReview: null,
+  allReviews: [],
+  loading: false,
+  error: null,
+
+  fetchReview: async (date) => {
+    set({ loading: true, error: null });
+    try {
+      const res = await reviewsApi.get(date);
+      set({ currentReview: res.data, loading: false });
+    } catch (err: any) {
+      set({ error: err.response?.data?.error || 'Failed to fetch day review', loading: false });
+    }
+  },
+
+  fetchAllReviews: async () => {
+    set({ loading: true, error: null });
+    try {
+      const res = await reviewsApi.getAll();
+      set({ allReviews: res.data, loading: false });
+    } catch (err: any) {
+      set({ error: err.response?.data?.error || 'Failed to fetch review history', loading: false });
+    }
+  },
+
+  saveReview: async (date, reviewData) => {
+    try {
+      const res = await reviewsApi.patch(date, reviewData);
+      set({ currentReview: res.data });
+      // Update in allReviews list if it exists
+      set((state) => {
+        const index = state.allReviews.findIndex((r) => r.date === date);
+        if (index > -1) {
+          const updated = [...state.allReviews];
+          updated[index] = res.data;
+          return { allReviews: updated };
+        } else {
+          return { allReviews: [res.data, ...state.allReviews] };
+        }
+      });
+    } catch (err: any) {
+      set({ error: err.response?.data?.error || 'Failed to auto-save review' });
+    }
+  },
+}));
+
+// ----------------------------------------------------
+// FOCUS TIMER STORE (With persistent timer alignment)
+// ----------------------------------------------------
+interface FocusState {
+  timeLeft: number;
+  duration: number;
+  isRunning: boolean;
+  mode: 'focus' | 'shortBreak' | 'longBreak';
+  selectedTaskId: string | null;
+  targetEndTime: number | null;
+  startTimer: () => void;
+  pauseTimer: () => void;
+  resetTimer: () => void;
+  setMode: (mode: 'focus' | 'shortBreak' | 'longBreak') => void;
+  setSelectedTaskId: (id: string | null) => void;
+  tick: () => void;
+}
+
+const getDurationByMode = (mode: 'focus' | 'shortBreak' | 'longBreak') => {
+  if (mode === 'focus') return 25 * 60;
+  if (mode === 'shortBreak') return 5 * 60;
+  return 15 * 60;
+};
+
+export const useFocusStore = create<FocusState>()(
+  persist(
+    (set, get) => ({
+      timeLeft: 25 * 60,
+      duration: 25 * 60,
+      isRunning: false,
+      mode: 'focus',
+      selectedTaskId: null,
+      targetEndTime: null,
+
+      startTimer: () => {
+        const { timeLeft } = get();
+        set({
+          isRunning: true,
+          targetEndTime: Date.now() + timeLeft * 1000,
+        });
+      },
+
+      pauseTimer: () => {
+        const { targetEndTime } = get();
+        if (targetEndTime) {
+          const remaining = Math.max(0, Math.round((targetEndTime - Date.now()) / 1000));
+          set({
+            isRunning: false,
+            timeLeft: remaining,
+            targetEndTime: null,
+          });
+        } else {
+          set({ isRunning: false });
+        }
+      },
+
+      resetTimer: () => {
+        const { mode } = get();
+        const dur = getDurationByMode(mode);
+        set({
+          isRunning: false,
+          timeLeft: dur,
+          duration: dur,
+          targetEndTime: null,
+        });
+      },
+
+      setMode: (mode) => {
+        const dur = getDurationByMode(mode);
+        set({
+          mode,
+          isRunning: false,
+          timeLeft: dur,
+          duration: dur,
+          targetEndTime: null,
+        });
+      },
+
+      setSelectedTaskId: (id) => set({ selectedTaskId: id }),
+
+      tick: () => {
+        const { isRunning, targetEndTime } = get();
+        if (!isRunning || !targetEndTime) return;
+
+        const remaining = Math.max(0, Math.round((targetEndTime - Date.now()) / 1000));
+        if (remaining === 0) {
+          set({
+            isRunning: false,
+            timeLeft: 0,
+            targetEndTime: null,
+          });
+        } else {
+          set({ timeLeft: remaining });
+        }
+      },
+    }),
+    {
+      name: 'dailyos-focus',
+    }
+  )
+);
+
