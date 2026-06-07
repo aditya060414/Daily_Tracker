@@ -1,4 +1,4 @@
-import { Schema, model, Document } from 'mongoose';
+import { Schema, model, Document, Types } from 'mongoose';
 
 export interface IMilestone {
   label: string;
@@ -11,6 +11,7 @@ export interface IProgressSnapshot {
 }
 
 export interface IGoal extends Document {
+  userId: Types.ObjectId;
   title: string;
   description?: string;
   type: 'today' | 'short-term' | 'long-term';
@@ -32,6 +33,7 @@ const progressSnapshotSchema = new Schema<IProgressSnapshot>({
 });
 
 const goalSchema = new Schema<IGoal>({
+  userId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
   title: { type: String, required: true, trim: true },
   description: { type: String, default: '' },
   type: {
