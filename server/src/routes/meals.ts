@@ -1,15 +1,15 @@
 import { Router } from 'express';
 import { Meal, IMealItem } from '../models/Meal';
-import { authenticateToken } from '../middleware/auth';
+import { authenticateToken, AuthenticatedRequest } from '../middleware/auth';
 
 const router = Router();
 router.use(authenticateToken);
 
-// GET /api/v1/meals/:date - Get all meal segments for a date
-router.get('/:date', async (req, res, next) => {
+// GET /api/v1/meals/:date - Get all meal segments for a date for user
+router.get('/:date', async (req: AuthenticatedRequest, res, next) => {
   try {
     const { date } = req.params;
-    const meals = await Meal.find({ date });
+    const meals = await Meal.find({ date, userId: req.user!.userId });
     return res.json({
       success: true,
       data: meals,
@@ -19,12 +19,12 @@ router.get('/:date', async (req, res, next) => {
   }
 });
 
-// PUT /api/v1/meals/:date - Upsert a meal segment (e.g. breakfast, lunch, dinner, snack)
-// Body: { mealType: 'breakfast'|'lunch'|'dinner'|'snack', items: [ { name, calories, protein, carbs, fat } ] }
-router.put('/:date', async (req, res, next) => {
+// PUT /api/v1/meals/:date - Upsert a meal segment for user
+router.put('/:date', async (req: AuthenticatedRequest, res, next) => {
   try {
     const { date } = req.params;
     const { mealType, items } = req.body;
+    const userId = req.user!.userId;
 
     if (!mealType || !Array.isArray(items)) {
       return res.status(400).json({
@@ -38,13 +38,13 @@ router.put('/:date', async (req, res, next) => {
 
     // Upsert meal segment
     await Meal.findOneAndUpdate(
-      { date, mealType },
-      { items, totalCalories },
+      { date, mealType, userId },
+      { items, totalCalories, userId },
       { new: true, upsert: true, runValidators: true }
     );
 
     // Get all meals for this date to return synchronized data
-    const allMeals = await Meal.find({ date });
+    const allMeals = await Meal.find({ date, userId });
 
     return res.json({
       success: true,
@@ -55,13 +55,14 @@ router.put('/:date', async (req, res, next) => {
   }
 });
 
-// DELETE /api/v1/meals/:date/:mealType - Clear a specific meal segment
-router.delete('/:date/:mealType', async (req, res, next) => {
+// DELETE /api/v1/meals/:date/:mealType - Clear a specific meal segment for user
+router.delete('/:date/:mealType', async (req: AuthenticatedRequest, res, next) => {
   try {
     const { date, mealType } = req.params;
-    await Meal.findOneAndDelete({ date, mealType });
+    const userId = req.user!.userId;
+    await Meal.findOneAndDelete({ date, mealType, userId });
 
-    const allMeals = await Meal.find({ date });
+    const allMeals = await Meal.find({ date, userId });
     return res.json({
       success: true,
       data: allMeals,
