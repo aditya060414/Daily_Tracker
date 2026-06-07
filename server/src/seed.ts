@@ -12,7 +12,7 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
-const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/dailyos';
+const MONGODB_URI = process.env.MOONGO_URI || process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/dailyos';
 const DEFAULT_USER = process.env.DEFAULT_USER || 'admin';
 const DEFAULT_PASS = process.env.DEFAULT_PASS || 'password123';
 
