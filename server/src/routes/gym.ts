@@ -1,16 +1,15 @@
 import { Router } from 'express';
 import { GymSession } from '../models/GymSession';
-import { authenticateToken } from '../middleware/auth';
-import { startOfWeek, endOfWeek, parseISO } from 'date-fns';
+import { authenticateToken, AuthenticatedRequest } from '../middleware/auth';
 
 const router = Router();
 router.use(authenticateToken);
 
-// GET /api/v1/gym - Get gym sessions with optional date range queries (startDate, endDate)
-router.get('/', async (req, res, next) => {
+// GET /api/v1/gym - Get gym sessions with optional date range queries (startDate, endDate) for user
+router.get('/', async (req: AuthenticatedRequest, res, next) => {
   try {
     const { startDate, endDate } = req.query;
-    const query: any = {};
+    const query: any = { userId: req.user!.userId };
 
     if (startDate || endDate) {
       query.date = {};
@@ -28,29 +27,31 @@ router.get('/', async (req, res, next) => {
   }
 });
 
-// GET /api/v1/gym/:date - Get a specific gym session
-router.get('/:date', async (req, res, next) => {
+// GET /api/v1/gym/:date - Get a specific gym session for user
+router.get('/:date', async (req: AuthenticatedRequest, res, next) => {
   try {
     const { date } = req.params;
-    const session = await GymSession.findOne({ date });
+    const session = await GymSession.findOne({ date, userId: req.user!.userId });
     return res.json({
       success: true,
-      data: session || null, // UI will handle null by presenting an empty workout sheet
+      data: session || null,
     });
   } catch (error) {
     next(error);
   }
 });
 
-// PUT /api/v1/gym/:date - Upsert workout session
-router.put('/:date', async (req, res, next) => {
+// PUT /api/v1/gym/:date - Upsert workout session for user
+router.put('/:date', async (req: AuthenticatedRequest, res, next) => {
   try {
     const { date } = req.params;
     const { exercises, durationMinutes, notes } = req.body;
+    const userId = req.user!.userId;
 
     const session = await GymSession.findOneAndUpdate(
-      { date },
+      { date, userId },
       {
+        userId,
         exercises: exercises || [],
         durationMinutes: durationMinutes || 0,
         notes: notes || '',
@@ -67,11 +68,11 @@ router.put('/:date', async (req, res, next) => {
   }
 });
 
-// DELETE /api/v1/gym/:date - Delete a session
-router.delete('/:date', async (req, res, next) => {
+// DELETE /api/v1/gym/:date - Delete a session for user
+router.delete('/:date', async (req: AuthenticatedRequest, res, next) => {
   try {
     const { date } = req.params;
-    const session = await GymSession.findOneAndDelete({ date });
+    const session = await GymSession.findOneAndDelete({ date, userId: req.user!.userId });
 
     if (!session) {
       return res.status(404).json({
