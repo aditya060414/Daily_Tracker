@@ -1,15 +1,15 @@
 import { Router } from 'express';
 import { Goal } from '../models/Goal';
-import { authenticateToken } from '../middleware/auth';
+import { authenticateToken, AuthenticatedRequest } from '../middleware/auth';
 import { format } from 'date-fns';
 
 const router = Router();
 router.use(authenticateToken);
 
-// GET /api/v1/goals - List all goals
-router.get('/', async (req, res, next) => {
+// GET /api/v1/goals - List all goals for user
+router.get('/', async (req: AuthenticatedRequest, res, next) => {
   try {
-    const goals = await Goal.find().sort({ createdAt: -1 });
+    const goals = await Goal.find({ userId: req.user!.userId }).sort({ createdAt: -1 });
     return res.json({
       success: true,
       data: goals,
@@ -19,8 +19,8 @@ router.get('/', async (req, res, next) => {
   }
 });
 
-// POST /api/v1/goals - Create a goal
-router.post('/', async (req, res, next) => {
+// POST /api/v1/goals - Create a goal for user
+router.post('/', async (req: AuthenticatedRequest, res, next) => {
   try {
     const { title, description, type, targetDate, milestones } = req.body;
     if (!title || !type || !targetDate) {
@@ -33,6 +33,7 @@ router.post('/', async (req, res, next) => {
 
     const todayStr = format(new Date(), 'yyyy-MM-dd');
     const newGoal = await Goal.create({
+      userId: req.user!.userId,
       title,
       description: description || '',
       type,
@@ -52,8 +53,8 @@ router.post('/', async (req, res, next) => {
   }
 });
 
-// PATCH /api/v1/goals/:id/progress - Update progress and store historical snapshot
-router.patch('/:id/progress', async (req, res, next) => {
+// PATCH /api/v1/goals/:id/progress - Update progress for user goal
+router.patch('/:id/progress', async (req: AuthenticatedRequest, res, next) => {
   try {
     const { progress } = req.body;
     if (progress === undefined || progress < 0 || progress > 100) {
@@ -64,7 +65,7 @@ router.patch('/:id/progress', async (req, res, next) => {
       });
     }
 
-    const goal = await Goal.findById(req.params.id);
+    const goal = await Goal.findOne({ _id: req.params.id, userId: req.user!.userId });
     if (!goal) {
       return res.status(404).json({
         success: false,
@@ -101,11 +102,11 @@ router.patch('/:id/progress', async (req, res, next) => {
   }
 });
 
-// PUT /api/v1/goals/:id - Update complete goal info (milestones, description, status, etc)
-router.put('/:id', async (req, res, next) => {
+// PUT /api/v1/goals/:id - Update complete goal info for user
+router.put('/:id', async (req: AuthenticatedRequest, res, next) => {
   try {
     const { title, description, type, targetDate, progress, milestones, status } = req.body;
-    const goal = await Goal.findById(req.params.id);
+    const goal = await Goal.findOne({ _id: req.params.id, userId: req.user!.userId });
 
     if (!goal) {
       return res.status(404).json({
@@ -144,10 +145,10 @@ router.put('/:id', async (req, res, next) => {
   }
 });
 
-// DELETE /api/v1/goals/:id - Delete a goal
-router.delete('/:id', async (req, res, next) => {
+// DELETE /api/v1/goals/:id - Delete a goal for user
+router.delete('/:id', async (req: AuthenticatedRequest, res, next) => {
   try {
-    const goal = await Goal.findByIdAndDelete(req.params.id);
+    const goal = await Goal.findOneAndDelete({ _id: req.params.id, userId: req.user!.userId });
     if (!goal) {
       return res.status(404).json({
         success: false,
