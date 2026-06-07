@@ -1,14 +1,15 @@
-import { Schema, model, Document } from 'mongoose';
+import { Schema, model, Document, Types } from 'mongoose';
 
 export interface ITimeBlock {
   startTime: string; // HH:MM
   endTime: string; // HH:MM
   label: string;
-  category: 'work' | 'health' | 'learning' | 'personal' | 'rest';
+  category: string;
   completed: boolean;
 }
 
 export interface IDayPlan extends Document {
+  userId: Types.ObjectId;
   date: string; // YYYY-MM-DD
   timeBlocks: ITimeBlock[];
   notes?: string;
@@ -20,16 +21,19 @@ const timeBlockSchema = new Schema<ITimeBlock>({
   label: { type: String, required: true, trim: true },
   category: {
     type: String,
-    enum: ['work', 'health', 'learning', 'personal', 'rest'],
     required: true,
   },
   completed: { type: Boolean, default: false },
 });
 
 const dayPlanSchema = new Schema<IDayPlan>({
-  date: { type: String, required: true, unique: true }, // One timeline plan per date
+  userId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+  date: { type: String, required: true }, // Format YYYY-MM-DD
   timeBlocks: [timeBlockSchema],
   notes: { type: String, default: '' },
 }, { timestamps: true });
+
+// Ensure unique plan timelines per user per date
+dayPlanSchema.index({ userId: 1, date: 1 }, { unique: true });
 
 export const DayPlan = model<IDayPlan>('DayPlan', dayPlanSchema);
