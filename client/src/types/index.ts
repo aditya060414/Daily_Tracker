@@ -1,9 +1,16 @@
 export interface User {
   id: string;
-  username: string;
+  name: string;
+  email: string;
+  avatar?: string;
+  googleId?: string;
+  isVerified: boolean;
+  loginMethod: 'email' | 'google';
+  lastLogin?: string;
+  username?: string; // For backward compatibility with existing views
 }
 
-export type CategoryType = 'health' | 'work' | 'learning' | 'personal';
+export type CategoryType = 'health' | 'work' | 'learning' | 'personal' | (string & {});
 
 export interface TaskTemplate {
   _id: string;
@@ -51,7 +58,7 @@ export interface GymSession {
   notes?: string;
 }
 
-export type PlanCategoryType = 'work' | 'health' | 'learning' | 'personal' | 'rest';
+export type PlanCategoryType = 'work' | 'health' | 'learning' | 'personal' | 'rest' | (string & {});
 
 export interface TimeBlock {
   _id?: string;
