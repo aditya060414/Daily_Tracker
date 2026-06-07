@@ -1,5 +1,8 @@
 import express from 'express';
 import cors from 'cors';
+import cookieParser from 'cookie-parser';
+import helmet from 'helmet';
+import rateLimit from 'express-rate-limit';
 import dotenv from 'dotenv';
 import { connectDB } from './db';
 import { errorHandler } from './middleware/errorHandler';
@@ -23,7 +26,11 @@ const PORT = process.env.PORT || 5000;
 // Connect to Database
 connectDB();
 
-// Middlewares
+// Security and utility Middlewares
+app.use(helmet({
+  crossOriginResourcePolicy: { policy: "cross-origin" }
+}));
+app.use(cookieParser());
 app.use(cors({
   origin: ['http://localhost:5173', 'http://127.0.0.1:5173'],
   credentials: true,
@@ -31,14 +38,29 @@ app.use(cors({
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+// Auth rate limiter: max 10 requests per minute
+const authLimiter = rateLimit({
+  windowMs: 1 * 60 * 1000, // 1 minute
+  max: 10,
+  message: {
+    success: false,
+    error: 'Too many authentication attempts from this IP. Please try again after a minute.',
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
 // Log requests in development
 app.use((req, res, next) => {
   console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
   next();
 });
 
-// REST API routes registration under prefix /api/v1
-app.use('/api/v1/auth', authRouter);
+// REST API routes registration
+// Register auth routes under both /api/auth and /api/v1/auth for maximum flexibility
+app.use('/api/auth', authLimiter, authRouter);
+app.use('/api/v1/auth', authLimiter, authRouter);
+
 app.use('/api/v1/daily-tasks', dailyTasksRouter);
 app.use('/api/v1/daily-logs', dailyLogsRouter);
 app.use('/api/v1/gym', gymRouter);
