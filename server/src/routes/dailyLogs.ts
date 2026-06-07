@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { DailyLog, ILogTask } from '../models/DailyLog';
 import { DailyTask } from '../models/DailyTask';
-import { authenticateToken } from '../middleware/auth';
+import { authenticateToken, AuthenticatedRequest } from '../middleware/auth';
 import { Types } from 'mongoose';
 
 const router = Router();
@@ -15,11 +15,12 @@ const recalculatePoints = (log: any) => {
 };
 
 // GET /api/v1/daily-logs/:date - Get (or create & populate) daily log for a date (format: YYYY-MM-DD)
-router.get('/:date', async (req, res, next) => {
+router.get('/:date', async (req: AuthenticatedRequest, res, next) => {
   try {
     const { date } = req.params;
-    let log = await DailyLog.findOne({ date });
-    const repeatingTasks = await DailyTask.find({ isRepeating: true });
+    const userId = req.user!.userId;
+    let log = await DailyLog.findOne({ date, userId });
+    const repeatingTasks = await DailyTask.find({ isRepeating: true, userId });
 
     if (!log) {
       // Find all repeating tasks to pre-populate this day
@@ -32,6 +33,7 @@ router.get('/:date', async (req, res, next) => {
       }));
 
       log = await DailyLog.create({
+        userId,
         date,
         tasks: tasksToInsert,
         totalPoints: 0,
@@ -106,10 +108,11 @@ router.get('/:date', async (req, res, next) => {
 });
 
 // POST /api/v1/daily-logs/:date - Add an inline one-off task to a specific day
-router.post('/:date', async (req, res, next) => {
+router.post('/:date', async (req: AuthenticatedRequest, res, next) => {
   try {
     const { date } = req.params;
     const { title, points, category } = req.body;
+    const userId = req.user!.userId;
 
     if (!title || !category) {
       return res.status(400).json({
@@ -119,10 +122,10 @@ router.post('/:date', async (req, res, next) => {
       });
     }
 
-    let log = await DailyLog.findOne({ date });
+    let log = await DailyLog.findOne({ date, userId });
     if (!log) {
       // Create a log first if it doesn't exist
-      const repeatingTasks = await DailyTask.find({ isRepeating: true });
+      const repeatingTasks = await DailyTask.find({ isRepeating: true, userId });
       const tasksToInsert: ILogTask[] = repeatingTasks.map(task => ({
         taskId: task._id as Types.ObjectId,
         title: task.title,
@@ -131,6 +134,7 @@ router.post('/:date', async (req, res, next) => {
         completed: false,
       }));
       log = new DailyLog({
+        userId,
         date,
         tasks: tasksToInsert,
         totalPoints: 0,
@@ -159,11 +163,11 @@ router.post('/:date', async (req, res, next) => {
 });
 
 // PATCH /api/v1/daily-logs/:date - Toggle task completion status
-// Body: { logTaskId: string, completed: boolean }
-router.patch('/:date', async (req, res, next) => {
+router.patch('/:date', async (req: AuthenticatedRequest, res, next) => {
   try {
     const { date } = req.params;
     const { logTaskId, completed } = req.body;
+    const userId = req.user!.userId;
 
     if (!logTaskId) {
       return res.status(400).json({
@@ -173,7 +177,7 @@ router.patch('/:date', async (req, res, next) => {
       });
     }
 
-    const log = await DailyLog.findOne({ date });
+    const log = await DailyLog.findOne({ date, userId });
     if (!log) {
       return res.status(404).json({
         success: false,
@@ -208,10 +212,11 @@ router.patch('/:date', async (req, res, next) => {
 });
 
 // DELETE /api/v1/daily-logs/:date/:logTaskId - Delete task from a specific day's list
-router.delete('/:date/:logTaskId', async (req, res, next) => {
+router.delete('/:date/:logTaskId', async (req: AuthenticatedRequest, res, next) => {
   try {
     const { date, logTaskId } = req.params;
-    const log = await DailyLog.findOne({ date });
+    const userId = req.user!.userId;
+    const log = await DailyLog.findOne({ date, userId });
 
     if (!log) {
       return res.status(404).json({
