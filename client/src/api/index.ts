@@ -19,6 +19,7 @@ const api = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
+  withCredentials: true,
 });
 
 // Request interceptor to attach JWT token
@@ -35,6 +36,20 @@ api.interceptors.request.use(
   }
 );
 
+// Response interceptor to handle token expiry / invalidation (401 status)
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response && error.response.status === 401) {
+      useAuthStore.getState().clearAuth();
+      if (window.location.pathname !== '/login') {
+        window.location.href = '/login';
+      }
+    }
+    return Promise.reject(error);
+  }
+);
+
 // Unified server response format
 export interface ApiResponse<T> {
   success: boolean;
@@ -43,22 +58,60 @@ export interface ApiResponse<T> {
 }
 
 export const authApi = {
-  login: async (username: string, password: string) => {
+  login: async (email: string, password: string) => {
     const res = await api.post<ApiResponse<{ token: string; user: User }>>('/auth/login', {
-      username,
+      email,
       password,
     });
     return res.data;
   },
-  register: async (username: string, password: string) => {
-    const res = await api.post<ApiResponse<{ token: string; user: User }>>('/auth/register', {
-      username,
+  register: async (name: string, email: string, password: string, confirmPassword: string) => {
+    const res = await api.post<ApiResponse<null>>('/auth/register', {
+      name,
+      email,
       password,
+      confirmPassword,
+    });
+    return res.data;
+  },
+  verifyOtp: async (email: string, otp: string, purpose: 'signup' | 'forgot_password' | 'google_login') => {
+    const res = await api.post<ApiResponse<{ token?: string; user?: User; resetToken?: string }>>('/auth/verify-otp', {
+      email,
+      otp,
+      purpose,
+    });
+    return res.data;
+  },
+  googleLogin: async (credential: string) => {
+    const res = await api.post<{ success: boolean; pendingOtp?: boolean; email?: string; error?: string }>('/auth/google-login', {
+      credential,
+    });
+    return res.data;
+  },
+  logout: async () => {
+    const res = await api.post<ApiResponse<null>>('/auth/logout');
+    return res.data;
+  },
+  forgotPassword: async (email: string) => {
+    const res = await api.post<ApiResponse<null>>('/auth/forgot-password', {
+      email,
+    });
+    return res.data;
+  },
+  resetPassword: async (email: string, password: string, resetToken: string) => {
+    const res = await api.post<ApiResponse<null>>('/auth/reset-password', {
+      email,
+      password,
+      resetToken,
     });
     return res.data;
   },
   me: async () => {
     const res = await api.get<ApiResponse<{ user: User }>>('/auth/me');
+    return res.data;
+  },
+  refresh: async () => {
+    const res = await api.post<ApiResponse<{ token: string; user: User }>>('/auth/refresh');
     return res.data;
   },
 };
