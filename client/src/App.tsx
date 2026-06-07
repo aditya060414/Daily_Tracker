@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, Outlet } from 'react-router-dom';
 import { useAuthStore } from './store';
+import { authApi } from './api';
 import { Sidebar } from './components/Sidebar';
 import { TopBar } from './components/TopBar';
 import { CommandPalette } from './components/CommandPalette';
@@ -48,7 +49,7 @@ const DashboardLayout: React.FC = () => {
         <TopBar onOpenCommandPalette={() => setIsCommandPaletteOpen(true)} />
 
         {/* Scrollable page panels */}
-        <main className="flex-grow overflow-y-auto">
+        <main className="flex-grow overflow-y-auto pb-16 md:pb-0">
           {/* Page outlet router */}
           <Outlet context={{ onOpenCommandPalette: () => setIsCommandPaletteOpen(true) }} />
         </main>
@@ -62,6 +63,65 @@ const DashboardLayout: React.FC = () => {
 
 export const App: React.FC = () => {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  const token = useAuthStore((state) => state.token);
+  const setAuth = useAuthStore((state) => state.setAuth);
+  const clearAuth = useAuthStore((state) => state.clearAuth);
+  const [booting, setBooting] = useState(true);
+  const [bootLogs, setBootLogs] = useState<string[]>([]);
+
+  useEffect(() => {
+    const initAuth = async () => {
+      setBootLogs(['INITIALIZING_SYSTEM_BOOT...']);
+      try {
+        await new Promise((resolve) => setTimeout(resolve, 200));
+        setBootLogs((prev) => [...prev, 'CONNECTING_TO_AUTH_GATEWAY...']);
+        
+        const res = await authApi.me();
+        if (res.success && res.data?.user) {
+          setBootLogs((prev) => [...prev, 'ACTIVE_SESSION_VERIFIED.', 'MOUNTING_COMPONENTS...']);
+          await new Promise((resolve) => setTimeout(resolve, 200));
+          setAuth(token || '', res.data.user);
+        } else {
+          clearAuth();
+        }
+      } catch (err) {
+        setBootLogs((prev) => [...prev, 'NO_ACTIVE_SESSION_FOUND.', 'BOOTING_GATEWAY_V1...']);
+        clearAuth();
+      } finally {
+        await new Promise((resolve) => setTimeout(resolve, 200));
+        setBooting(false);
+      }
+    };
+    initAuth();
+  }, []);
+
+  if (booting) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-darkbg text-off-white font-mono p-6 select-none relative">
+        <div className="absolute inset-0 bg-[linear-gradient(to_right,#141414_1px,transparent_1px),linear-gradient(to_bottom,#141414_1px,transparent_1px)] bg-[size:4rem_4rem] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_50%,#000_70%,transparent_100%)] opacity-35"></div>
+        
+        <div className="w-full max-w-sm bg-panel border border-border rounded-lg shadow-2xl p-6 z-10 glow-accent animate-fade-in">
+          <div className="flex items-center gap-2 mb-4 border-b border-border pb-3 text-accent">
+            <span className="w-2 h-2 rounded-full bg-accent animate-ping"></span>
+            <span className="text-xs font-bold tracking-widest uppercase">SYS_LOADER_V1</span>
+          </div>
+          
+          <div className="space-y-1 text-[10px] text-off-white-muted mb-4 h-20 overflow-y-auto">
+            {bootLogs.map((log, index) => (
+              <div key={index} className="flex gap-2">
+                <span className="text-accent shrink-0">&gt;</span>
+                <span>{log}</span>
+              </div>
+            ))}
+          </div>
+
+          <div className="w-full bg-card h-1 rounded-full overflow-hidden border border-border">
+            <div className="bg-accent h-full rounded-full animate-pulse" style={{ width: '100%' }}></div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <BrowserRouter>
@@ -79,7 +139,6 @@ export const App: React.FC = () => {
             element={
               <Dashboard
                 onOpenCommandPalette={() => {
-                  // Emits event that toggles palette
                   const e = new KeyboardEvent('keydown', { ctrlKey: true, key: 'k' });
                   window.dispatchEvent(e);
                 }}
