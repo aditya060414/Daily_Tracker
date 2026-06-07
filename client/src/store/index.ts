@@ -41,7 +41,14 @@ export const useAuthStore = create<AuthState>()(
       token: null,
       user: null,
       isAuthenticated: false,
-      setAuth: (token, user) => set({ token, user, isAuthenticated: true }),
+      setAuth: (token, user) => {
+        // Support backward compatibility with existing views that reference user.username
+        const mappedUser = {
+          ...user,
+          username: user.username || user.name || user.email.split('@')[0]
+        };
+        set({ token, user: mappedUser, isAuthenticated: true });
+      },
       clearAuth: () => set({ token: null, user: null, isAuthenticated: false }),
     }),
     {
