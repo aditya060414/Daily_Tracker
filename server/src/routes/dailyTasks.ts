@@ -1,16 +1,16 @@
 import { Router } from 'express';
 import { DailyTask } from '../models/DailyTask';
-import { authenticateToken } from '../middleware/auth';
+import { authenticateToken, AuthenticatedRequest } from '../middleware/auth';
 
 const router = Router();
 
 // Apply auth middleware to all daily-tasks routes
 router.use(authenticateToken);
 
-// GET /api/v1/daily-tasks - Get all task templates
-router.get('/', async (req, res, next) => {
+// GET /api/v1/daily-tasks - Get all task templates for user
+router.get('/', async (req: AuthenticatedRequest, res, next) => {
   try {
-    const tasks = await DailyTask.find().sort({ createdAt: -1 });
+    const tasks = await DailyTask.find({ userId: req.user!.userId }).sort({ createdAt: -1 });
     return res.json({
       success: true,
       data: tasks,
@@ -20,8 +20,8 @@ router.get('/', async (req, res, next) => {
   }
 });
 
-// POST /api/v1/daily-tasks - Create new task template
-router.post('/', async (req, res, next) => {
+// POST /api/v1/daily-tasks - Create new task template for user
+router.post('/', async (req: AuthenticatedRequest, res, next) => {
   try {
     const { title, isRepeating, points, category } = req.body;
     if (!title || !category) {
@@ -33,6 +33,7 @@ router.post('/', async (req, res, next) => {
     }
 
     const newTask = await DailyTask.create({
+      userId: req.user!.userId,
       title,
       isRepeating: isRepeating !== undefined ? isRepeating : true,
       points: points || 1,
@@ -48,11 +49,11 @@ router.post('/', async (req, res, next) => {
   }
 });
 
-// PUT /api/v1/daily-tasks/:id - Update task template
-router.put('/:id', async (req, res, next) => {
+// PUT /api/v1/daily-tasks/:id - Update task template for user
+router.put('/:id', async (req: AuthenticatedRequest, res, next) => {
   try {
     const { title, isRepeating, points, category } = req.body;
-    const task = await DailyTask.findById(req.params.id);
+    const task = await DailyTask.findOne({ _id: req.params.id, userId: req.user!.userId });
 
     if (!task) {
       return res.status(404).json({
@@ -78,10 +79,10 @@ router.put('/:id', async (req, res, next) => {
   }
 });
 
-// DELETE /api/v1/daily-tasks/:id - Delete task template
-router.delete('/:id', async (req, res, next) => {
+// DELETE /api/v1/daily-tasks/:id - Delete task template for user
+router.delete('/:id', async (req: AuthenticatedRequest, res, next) => {
   try {
-    const task = await DailyTask.findByIdAndDelete(req.params.id);
+    const task = await DailyTask.findOneAndDelete({ _id: req.params.id, userId: req.user!.userId });
     if (!task) {
       return res.status(404).json({
         success: false,
