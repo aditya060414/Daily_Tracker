@@ -23,7 +23,7 @@ const timeBlockSchema = z
     startTime: z.string().regex(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/, 'Format must be HH:MM'),
     endTime: z.string().regex(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/, 'Format must be HH:MM'),
     label: z.string().min(1, 'Label is required'),
-    category: z.enum(['work', 'health', 'learning', 'personal', 'rest']),
+    category: z.string().min(1, 'Category is required'),
     completed: z.boolean().default(false),
   })
   .refine(
@@ -52,6 +52,7 @@ export const DayPlanning: React.FC = () => {
   // Local State
   const [showAddForm, setShowAddForm] = useState(false);
   const [planTomorrowSuccess, setPlanTomorrowSuccess] = useState(false);
+  const [customCategoryText, setCustomCategoryText] = useState('');
 
   // Notes Local States
   const [todayNotes, setTodayNotes] = useState('');
@@ -65,6 +66,7 @@ export const DayPlanning: React.FC = () => {
     handleSubmit,
     setValue,
     reset,
+    watch,
     formState: { errors },
   } = useForm<TimeBlockFormValues>({
     resolver: zodResolver(timeBlockSchema),
@@ -76,6 +78,8 @@ export const DayPlanning: React.FC = () => {
       completed: false,
     },
   });
+
+  const watchedCategory = watch('category');
 
   // Load plan and tasks on mount / change
   useEffect(() => {
@@ -114,12 +118,27 @@ export const DayPlanning: React.FC = () => {
 
   // Submit time block creation
   const onSubmitBlock = async (values: TimeBlockFormValues) => {
+    let finalCategory = values.category;
+    if (values.category === 'custom') {
+      if (!customCategoryText.trim()) {
+        alert('Please enter a custom category name');
+        return;
+      }
+      finalCategory = customCategoryText.trim();
+    }
+
+    const newBlock = {
+      ...values,
+      category: finalCategory,
+    };
+
     const currentBlocks = plan?.timeBlocks || [];
     // Append and sort chronologically by startTime
-    const updatedBlocks = [...currentBlocks, values].sort((a, b) => a.startTime.localeCompare(b.startTime));
+    const updatedBlocks = [...currentBlocks, newBlock].sort((a, b) => a.startTime.localeCompare(b.startTime));
 
     await savePlan(selectedDate, updatedBlocks, plan?.notes || '');
     setShowAddForm(false);
+    setCustomCategoryText('');
     reset({ startTime: '09:00', endTime: '10:00', label: '', category: 'work', completed: false });
   };
 
@@ -163,10 +182,13 @@ export const DayPlanning: React.FC = () => {
     
     // Map categories
     const cat = taskCategory.toLowerCase();
-    if (cat === 'work' || cat === 'health' || cat === 'learning' || cat === 'personal' || cat === 'rest') {
-      setValue('category', cat as any);
+    const standardCategories = ['work', 'health', 'learning', 'personal', 'rest'];
+    if (standardCategories.includes(cat)) {
+      setValue('category', cat);
+      setCustomCategoryText('');
     } else {
-      setValue('category', 'personal');
+      setValue('category', 'custom');
+      setCustomCategoryText(taskCategory);
     }
     
     setShowAddForm(true);
@@ -274,6 +296,7 @@ export const DayPlanning: React.FC = () => {
                     <option value="learning">Learning</option>
                     <option value="personal">Personal</option>
                     <option value="rest">Rest</option>
+                    <option value="custom">Custom...</option>
                   </select>
                 </div>
 
@@ -287,6 +310,19 @@ export const DayPlanning: React.FC = () => {
                   </button>
                 </div>
               </div>
+
+              {watchedCategory === 'custom' && (
+                <div className="pt-2 animate-fade-in w-full">
+                  <label className="text-[9px] uppercase tracking-wider text-off-white-muted">Custom Category Name</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Coding, Chores, Commute"
+                    value={customCategoryText}
+                    onChange={(e) => setCustomCategoryText(e.target.value)}
+                    className="w-full px-3 py-2 bg-darkbg border border-border rounded text-off-white outline-none focus:border-accent"
+                  />
+                </div>
+              )}
             </form>
           )}
 
