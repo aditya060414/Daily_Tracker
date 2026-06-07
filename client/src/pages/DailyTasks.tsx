@@ -24,7 +24,7 @@ import { LoadingSpinner } from '../components/LoadingSpinner';
 const taskTemplateSchema = z.object({
   title: z.string().min(1, 'Task title is required'),
   points: z.coerce.number().min(1, 'Min 1 point').max(5, 'Max 5 points'),
-  category: z.enum(['health', 'work', 'learning', 'personal']),
+  category: z.string().min(1, 'Category is required'),
   isRepeating: z.preprocess((val) => val === 'true' || val === true, z.boolean().default(true)),
 });
 
@@ -54,15 +54,18 @@ export const DailyTasks: React.FC = () => {
   const [deleteType, setDeleteType] = useState<'template' | 'logTask'>('template');
   const [showConfirm, setShowConfirm] = useState(false);
   const [oneOffTitle, setOneOffTitle] = useState('');
-  const [oneOffCategory, setOneOffCategory] = useState<'health' | 'work' | 'learning' | 'personal'>('personal');
+  const [oneOffCategory, setOneOffCategory] = useState<string>('personal');
+  const [oneOffCustomText, setOneOffCustomText] = useState('');
   const [oneOffPoints, setOneOffPoints] = useState(1);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [customCategoryText, setCustomCategoryText] = useState('');
 
   // Form setup for adding template
   const {
     register,
     handleSubmit,
     reset,
+    watch,
     formState: { errors },
   } = useForm<TaskTemplateFormValues>({
     resolver: zodResolver(taskTemplateSchema),
@@ -74,6 +77,8 @@ export const DailyTasks: React.FC = () => {
     },
   });
 
+  const watchedCategory = watch('category');
+
   // Load templates and daily log on mount / date change
   useEffect(() => {
     fetchTemplates();
@@ -82,12 +87,27 @@ export const DailyTasks: React.FC = () => {
 
   // Form submit for template
   const onSubmitTemplate = async (values: TaskTemplateFormValues) => {
+    let finalCategory = values.category;
+    if (values.category === 'custom') {
+      if (!customCategoryText.trim()) {
+        alert('Please enter a custom category name');
+        return;
+      }
+      finalCategory = customCategoryText.trim();
+    }
+
+    const payload = {
+      ...values,
+      category: finalCategory,
+    };
+
     if (editingId) {
-      await updateTemplate(editingId, values);
+      await updateTemplate(editingId, payload);
       setEditingId(null);
     } else {
-      await createTemplate(values);
+      await createTemplate(payload);
     }
+    setCustomCategoryText('');
     reset({
       title: '',
       points: 1,
@@ -98,16 +118,26 @@ export const DailyTasks: React.FC = () => {
 
   const handleStartEdit = (template: any) => {
     setEditingId(template._id);
+    const standardCategories = ['personal', 'health', 'work', 'learning'];
+    const isCustom = !standardCategories.includes(template.category);
+
     reset({
       title: template.title,
       points: template.points,
-      category: template.category,
+      category: isCustom ? 'custom' : template.category,
       isRepeating: template.isRepeating,
     });
+
+    if (isCustom) {
+      setCustomCategoryText(template.category);
+    } else {
+      setCustomCategoryText('');
+    }
   };
 
   const handleCancelEdit = () => {
     setEditingId(null);
+    setCustomCategoryText('');
     reset({
       title: '',
       points: 1,
@@ -121,14 +151,25 @@ export const DailyTasks: React.FC = () => {
     e.preventDefault();
     if (!oneOffTitle.trim()) return;
 
+    let finalCategory = oneOffCategory;
+    if (oneOffCategory === 'custom') {
+      if (!oneOffCustomText.trim()) {
+        alert('Please enter a custom category name');
+        return;
+      }
+      finalCategory = oneOffCustomText.trim();
+    }
+
     await addOneOffTask(selectedDate, {
       title: oneOffTitle,
       points: oneOffPoints,
-      category: oneOffCategory,
+      category: finalCategory,
     });
 
     setOneOffTitle('');
     setOneOffPoints(1);
+    setOneOffCustomText('');
+    setOneOffCategory('personal');
   };
 
   // Confirm delete triggers
@@ -228,6 +269,7 @@ export const DailyTasks: React.FC = () => {
                   <option value="health">Health</option>
                   <option value="work">Work</option>
                   <option value="learning">Learning</option>
+                  <option value="custom">Custom...</option>
                 </select>
               </div>
 
@@ -258,6 +300,19 @@ export const DailyTasks: React.FC = () => {
                 </select>
               </div>
             </div>
+
+            {watchedCategory === 'custom' && (
+              <div className="space-y-1 animate-fade-in">
+                <label className="text-[10px] text-off-white-muted uppercase tracking-wider">Custom Category Name</label>
+                <input
+                  type="text"
+                  placeholder="e.g. Coding, Meditation, Chores"
+                  value={customCategoryText}
+                  onChange={(e) => setCustomCategoryText(e.target.value)}
+                  className="w-full px-3 py-2 bg-darkbg border border-border rounded text-off-white outline-none focus:border-accent"
+                />
+              </div>
+            )}
 
             <button
               type="submit"
@@ -354,50 +409,69 @@ export const DailyTasks: React.FC = () => {
         </div>
 
         {/* Quick add one-off task inline */}
-        <form onSubmit={handleAddOneOff} className="grid grid-cols-1 sm:grid-cols-12 gap-2 mb-4 font-mono text-xs">
-          <div className="sm:col-span-6">
-            <input
-              type="text"
-              placeholder="Add one-off task for today..."
-              className="w-full px-3 py-2 bg-darkbg border border-border rounded text-off-white outline-none focus:border-accent"
-              value={oneOffTitle}
-              onChange={(e) => setOneOffTitle(e.target.value)}
-            />
+        <form onSubmit={handleAddOneOff} className="space-y-2 mb-4 font-mono text-xs">
+          <div className="grid grid-cols-1 sm:grid-cols-12 gap-2">
+            <div className="sm:col-span-6">
+              <input
+                type="text"
+                placeholder="Add one-off task for today..."
+                className="w-full px-3 py-2 bg-darkbg border border-border rounded text-off-white outline-none focus:border-accent"
+                value={oneOffTitle}
+                onChange={(e) => setOneOffTitle(e.target.value)}
+              />
+            </div>
+            <div className="sm:col-span-3">
+              <select
+                className="w-full px-2 py-2 bg-darkbg border border-border rounded text-off-white outline-none focus:border-accent"
+                value={oneOffCategory}
+                onChange={(e: any) => {
+                  setOneOffCategory(e.target.value);
+                  if (e.target.value !== 'custom') {
+                    setOneOffCustomText('');
+                  }
+                }}
+              >
+                <option value="personal">Personal</option>
+                <option value="health">Health</option>
+                <option value="work">Work</option>
+                <option value="learning">Learning</option>
+                <option value="custom">Custom...</option>
+              </select>
+            </div>
+            <div className="sm:col-span-2">
+              <select
+                className="w-full px-2 py-2 bg-darkbg border border-border rounded text-off-white outline-none focus:border-accent"
+                value={oneOffPoints}
+                onChange={(e: any) => setOneOffPoints(Number(e.target.value))}
+              >
+                <option value="1">1 pt</option>
+                <option value="2">2 pts</option>
+                <option value="3">3 pts</option>
+                <option value="4">4 pts</option>
+                <option value="5">5 pts</option>
+              </select>
+            </div>
+            <div className="sm:col-span-1">
+              <button
+                type="submit"
+                className="w-full h-full py-2 bg-card border border-border hover:border-accent hover:text-accent rounded flex items-center justify-center transition-colors"
+                title="Add Task for Today only"
+              >
+                <Plus className="w-4 h-4" />
+              </button>
+            </div>
           </div>
-          <div className="sm:col-span-3">
-            <select
-              className="w-full px-2 py-2 bg-darkbg border border-border rounded text-off-white outline-none focus:border-accent"
-              value={oneOffCategory}
-              onChange={(e: any) => setOneOffCategory(e.target.value)}
-            >
-              <option value="personal">Personal</option>
-              <option value="health">Health</option>
-              <option value="work">Work</option>
-              <option value="learning">Learning</option>
-            </select>
-          </div>
-          <div className="sm:col-span-2">
-            <select
-              className="w-full px-2 py-2 bg-darkbg border border-border rounded text-off-white outline-none focus:border-accent"
-              value={oneOffPoints}
-              onChange={(e: any) => setOneOffPoints(Number(e.target.value))}
-            >
-              <option value="1">1 pt</option>
-              <option value="2">2 pts</option>
-              <option value="3">3 pts</option>
-              <option value="4">4 pts</option>
-              <option value="5">5 pts</option>
-            </select>
-          </div>
-          <div className="sm:col-span-1">
-            <button
-              type="submit"
-              className="w-full h-full py-2 bg-card border border-border hover:border-accent hover:text-accent rounded flex items-center justify-center transition-colors"
-              title="Add Task for Today only"
-            >
-              <Plus className="w-4 h-4" />
-            </button>
-          </div>
+          {oneOffCategory === 'custom' && (
+            <div className="w-full animate-fade-in">
+              <input
+                type="text"
+                placeholder="Enter custom category name..."
+                className="w-full px-3 py-2 bg-darkbg border border-border rounded text-off-white outline-none focus:border-accent"
+                value={oneOffCustomText}
+                onChange={(e) => setOneOffCustomText(e.target.value)}
+              />
+            </div>
+          )}
         </form>
 
         {/* Checklist items */}
