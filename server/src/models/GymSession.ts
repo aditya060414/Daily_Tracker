@@ -1,4 +1,4 @@
-import { Schema, model, Document } from 'mongoose';
+import { Schema, model, Document, Types } from 'mongoose';
 
 export interface IGymExercise {
   name: string;
@@ -10,6 +10,7 @@ export interface IGymExercise {
 }
 
 export interface IGymSession extends Document {
+  userId: Types.ObjectId;
   date: string; // YYYY-MM-DD
   exercises: IGymExercise[];
   durationMinutes: number;
@@ -26,10 +27,14 @@ const gymExerciseSchema = new Schema<IGymExercise>({
 });
 
 const gymSessionSchema = new Schema<IGymSession>({
-  date: { type: String, required: true, unique: true }, // One session per day
+  userId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+  date: { type: String, required: true }, // Format YYYY-MM-DD
   exercises: [gymExerciseSchema],
   durationMinutes: { type: Number, default: 0 },
   notes: { type: String, default: '' },
 }, { timestamps: true });
+
+// Ensure unique sessions per user per date
+gymSessionSchema.index({ userId: 1, date: 1 }, { unique: true });
 
 export const GymSession = model<IGymSession>('GymSession', gymSessionSchema);
