@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { DayReview } from '../models/DayReview';
-import { authenticateToken } from '../middleware/auth';
+import { authenticateToken, AuthenticatedRequest } from '../middleware/auth';
 
 const router = Router();
 router.use(authenticateToken);
@@ -17,10 +17,10 @@ const calculateWordCount = (
   return text.split(/\s+/).filter(word => word.length > 0).length;
 };
 
-// GET /api/v1/reviews - List all reviews (sorted by date descending)
-router.get('/', async (req, res, next) => {
+// GET /api/v1/reviews - List all reviews (sorted by date descending) for user
+router.get('/', async (req: AuthenticatedRequest, res, next) => {
   try {
-    const reviews = await DayReview.find().sort({ date: -1 });
+    const reviews = await DayReview.find({ userId: req.user!.userId }).sort({ date: -1 });
     return res.json({
       success: true,
       data: reviews,
@@ -30,11 +30,11 @@ router.get('/', async (req, res, next) => {
   }
 });
 
-// GET /api/v1/reviews/:date - Get specific day review
-router.get('/:date', async (req, res, next) => {
+// GET /api/v1/reviews/:date - Get specific day review for user
+router.get('/:date', async (req: AuthenticatedRequest, res, next) => {
   try {
     const { date } = req.params;
-    const review = await DayReview.findOne({ date });
+    const review = await DayReview.findOne({ date, userId: req.user!.userId });
     return res.json({
       success: true,
       data: review || null,
@@ -44,14 +44,15 @@ router.get('/:date', async (req, res, next) => {
   }
 });
 
-// PATCH /api/v1/reviews/:date - Upsert a day review (saves automatically on blur / update)
-router.patch('/:date', async (req, res, next) => {
+// PATCH /api/v1/reviews/:date - Upsert a day review for user
+router.patch('/:date', async (req: AuthenticatedRequest, res, next) => {
   try {
     const { date } = req.params;
     const { mood, highlights, challenges, gratitude, tomorrowFocus } = req.body;
+    const userId = req.user!.userId;
 
     // Fetch existing or initialize default review fields to calculate wordCount accurately
-    const existing = await DayReview.findOne({ date });
+    const existing = await DayReview.findOne({ date, userId });
     
     const updatedMood = mood !== undefined ? mood : (existing?.mood || 3);
     const updatedHighlights = highlights !== undefined ? highlights : (existing?.highlights || '');
@@ -67,8 +68,9 @@ router.patch('/:date', async (req, res, next) => {
     );
 
     const review = await DayReview.findOneAndUpdate(
-      { date },
+      { date, userId },
       {
+        userId,
         mood: updatedMood,
         highlights: updatedHighlights,
         challenges: updatedChallenges,
