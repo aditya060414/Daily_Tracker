@@ -1,13 +1,13 @@
 import { Router } from 'express';
 import { DailyLog } from '../models/DailyLog';
-import { authenticateToken } from '../middleware/auth';
-import { subDays, format, parseISO } from 'date-fns';
+import { authenticateToken, AuthenticatedRequest } from '../middleware/auth';
+import { subDays, format } from 'date-fns';
 
 const router = Router();
 router.use(authenticateToken);
 
-// GET /api/v1/analytics/points?range=7|14|30
-router.get('/points', async (req, res, next) => {
+// GET /api/v1/analytics/points?range=7|14|30 for user
+router.get('/points', async (req: AuthenticatedRequest, res, next) => {
   try {
     const range = parseInt(req.query.range as string) || 30;
     
@@ -20,9 +20,10 @@ router.get('/points', async (req, res, next) => {
       dates.push(format(d, 'yyyy-MM-dd'));
     }
 
-    // Query logs in this date set
+    // Query logs in this date set and limit to this user
     const logs = await DailyLog.find({
       date: { $in: dates },
+      userId: req.user!.userId,
     });
 
     // Build a map of date -> points
