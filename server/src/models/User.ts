@@ -1,13 +1,33 @@
-import { Schema, model } from 'mongoose';
+import { Schema, model, Document } from 'mongoose';
 
-export interface IUser {
-  username: string;
-  passwordHash: string;
+export interface IUser extends Document {
+  name: string;
+  email: string;
+  password?: string;
+  avatar?: string;
+  googleId?: string;
+  isVerified: boolean;
+  loginMethod: 'email' | 'google';
+  lastLogin?: Date;
+  createdAt: Date;
+  updatedAt: Date;
 }
 
 const userSchema = new Schema<IUser>({
-  username: { type: String, required: true, unique: true },
-  passwordHash: { type: String, required: true },
+  name: { type: String, required: true, trim: true },
+  email: {
+    type: String,
+    required: true,
+    unique: true,
+    lowercase: true,
+    trim: true
+  },
+  password: { type: String }, // Optional for Google users
+  avatar: { type: String },
+  googleId: { type: String, unique: true, sparse: true },
+  isVerified: { type: Boolean, default: false },
+  loginMethod: { type: String, enum: ['email', 'google'], default: 'email' },
+  lastLogin: { type: Date },
 }, { timestamps: true });
 
 export const User = model<IUser>('User', userSchema);
