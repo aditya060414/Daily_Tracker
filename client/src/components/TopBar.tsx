@@ -1,6 +1,8 @@
-import React from 'react';
-import { Search } from 'lucide-react';
+import React, { useState } from 'react';
+import { Search, LogOut, ChevronDown } from 'lucide-react';
 import { useAuthStore, useDateStore, useDailyStore } from '../store';
+import { authApi } from '../api';
+import { useNavigate } from 'react-router-dom';
 import { PointsBadge } from './PointsBadge';
 import { DateNav } from './DateNav';
 
@@ -10,8 +12,12 @@ interface TopBarProps {
 
 export const TopBar: React.FC<TopBarProps> = ({ onOpenCommandPalette }) => {
   const user = useAuthStore((state) => state.user);
+  const clearAuth = useAuthStore((state) => state.clearAuth);
   const selectedDate = useDateStore((state) => state.selectedDate);
   const dailyLog = useDailyStore((state) => state.dailyLog);
+  const navigate = useNavigate();
+
+  const [dropdownOpen, setDropdownOpen] = useState(false);
 
   // Auto greeting based on time of day
   const getGreeting = () => {
@@ -20,11 +26,22 @@ export const TopBar: React.FC<TopBarProps> = ({ onOpenCommandPalette }) => {
     if (hours < 12) greet = 'Good morning';
     else if (hours < 17) greet = 'Good afternoon';
     
-    return `${greet}, ${user?.username || 'user'}`;
+    return `${greet}, ${user?.name || user?.username || 'user'}`;
   };
 
   // Extract points for selected date
   const pointsToday = dailyLog && dailyLog.date === selectedDate ? dailyLog.totalPoints : 0;
+
+  const handleLogout = async () => {
+    try {
+      await authApi.logout();
+    } catch (err) {
+      console.error('Logout request failed:', err);
+    } finally {
+      clearAuth();
+      navigate('/login');
+    }
+  };
 
   return (
     <header className="sticky top-0 z-30 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 px-6 py-4 bg-panel/85 backdrop-blur border-b border-border text-off-white select-none">
@@ -56,8 +73,56 @@ export const TopBar: React.FC<TopBarProps> = ({ onOpenCommandPalette }) => {
 
         {/* Dynamic Points Indicator */}
         <PointsBadge points={pointsToday} />
+
+        {/* User Profile Dropdown */}
+        <div className="relative">
+          <button
+            onClick={() => setDropdownOpen(!dropdownOpen)}
+            className="flex items-center gap-2 p-1 rounded hover:bg-card border border-transparent hover:border-border transition-all"
+          >
+            {user?.avatar ? (
+              <img
+                src={user.avatar}
+                alt="user avatar"
+                className="w-7 h-7 rounded border border-accent/20 object-cover"
+                onError={(e) => {
+                  (e.target as HTMLElement).style.display = 'none';
+                }}
+              />
+            ) : (
+              <div className="w-7 h-7 rounded bg-accent/20 border border-accent/30 flex items-center justify-center text-accent font-bold text-xs uppercase">
+                {(user?.name || user?.email || 'U').charAt(0)}
+              </div>
+            )}
+            <ChevronDown className="w-3.5 h-3.5 text-off-white-muted" />
+          </button>
+
+          {dropdownOpen && (
+            <>
+              {/* Overlay click catcher */}
+              <div className="fixed inset-0 z-40" onClick={() => setDropdownOpen(false)}></div>
+              
+              {/* Dropdown Box */}
+              <div className="absolute right-0 mt-2 w-48 bg-panel border border-border rounded shadow-2xl z-50 p-3.5 flex flex-col gap-2 font-mono text-xs text-off-white glow-accent">
+                <div className="flex flex-col min-w-0 pb-2 border-b border-border">
+                  <span className="font-bold truncate text-[11px] text-off-white">{user?.name || 'User'}</span>
+                  <span className="text-[9px] text-off-white-muted truncate mt-0.5">{user?.email}</span>
+                </div>
+                
+                <button
+                  onClick={handleLogout}
+                  className="w-full flex items-center gap-2.5 px-2 py-1.5 rounded text-[10px] text-red-400 hover:bg-red-500/15 transition-all text-left uppercase tracking-wider"
+                >
+                  <LogOut className="w-3.5 h-3.5" />
+                  <span>SYS_SHUTDOWN</span>
+                </button>
+              </div>
+            </>
+          )}
+        </div>
       </div>
     </header>
   );
 };
+
 export default TopBar;
