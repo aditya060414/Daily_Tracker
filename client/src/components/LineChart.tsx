@@ -28,6 +28,17 @@ export const LineChart: React.FC<LineChartProps> = ({
   height = 200,
   label = 'Points',
 }) => {
+  const [isMobile, setIsMobile] = React.useState(false);
+
+  React.useEffect(() => {
+    const handleResize = () => {
+      setIsMobile(window.innerWidth < 640);
+    };
+    handleResize();
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
   // Format dates for X-Axis tick (e.g., "Jun 03")
   const formatXAxis = (tickItem: string) => {
     try {
@@ -60,21 +71,30 @@ export const LineChart: React.FC<LineChartProps> = ({
   };
 
   return (
-    <div style={{ width: '100%', height }}>
+    <div style={{ width: '100%', minWidth: 0, height }}>
       <ResponsiveContainer width="100%" height="100%">
-        <RechartsLineChart data={data} margin={{ top: 10, right: 10, left: -25, bottom: 0 }}>
+        <RechartsLineChart
+          data={data}
+          margin={{
+            top: 10,
+            right: isMobile ? 5 : 10,
+            left: isMobile ? -35 : -25,
+            bottom: 0,
+          }}
+        >
           <CartesianGrid strokeDasharray="3 3" stroke="#1f1f1f" vertical={false} />
           <XAxis
             dataKey="date"
             tickFormatter={formatXAxis}
             stroke="#555"
-            tick={{ fill: '#a3a3a3', fontSize: 10, fontFamily: 'Geist Mono' }}
+            tick={{ fill: '#a3a3a3', fontSize: isMobile ? 8 : 10, fontFamily: 'Geist Mono' }}
             axisLine={{ stroke: '#2a2a2a' }}
             tickLine={{ stroke: '#2a2a2a' }}
+            interval={isMobile ? Math.ceil(data.length / 4) : 'preserveEnd'}
           />
           <YAxis
             stroke="#555"
-            tick={{ fill: '#a3a3a3', fontSize: 10, fontFamily: 'Geist Mono' }}
+            tick={{ fill: '#a3a3a3', fontSize: isMobile ? 8 : 10, fontFamily: 'Geist Mono' }}
             axisLine={{ stroke: '#2a2a2a' }}
             tickLine={{ stroke: '#2a2a2a' }}
           />
