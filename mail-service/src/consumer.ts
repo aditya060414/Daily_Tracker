@@ -30,7 +30,23 @@ export const startConnection = async () => {
     channel.consume(queueName, async (msg) => {
       if (msg) {
         try {
-          const { to, subject, body } = JSON.parse(msg.content.toString());
+          const content = msg.content.toString();
+          let payload;
+          try {
+            payload = JSON.parse(content);
+          } catch (e) {
+            console.error(`[Mail Service] Failed to parse message JSON:`, content);
+            channel.ack(msg);
+            return;
+          }
+
+          const { to, subject, body } = payload;
+          if (!to) {
+            console.error(`[Mail Service] Missing recipient ("to") in payload:`, payload);
+            channel.ack(msg);
+            return;
+          }
+
           console.log(`[Mail Service] Received OTP delivery request for: ${to}`);
 
           const transporter = nodemailer.createTransport({
@@ -54,7 +70,8 @@ export const startConnection = async () => {
           channel.ack(msg);
         } catch (error) {
           console.error(`[Mail Service] Failed to process OTP message:`, error);
-          // Do not ack the message so it can be retried or debugged, or log it
+          // Acknowledge the message to prevent it from looping infinitely
+          channel.ack(msg);
         }
       }
     });
