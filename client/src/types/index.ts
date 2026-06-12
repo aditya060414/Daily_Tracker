@@ -56,6 +56,7 @@ export interface GymSession {
   exercises: GymExercise[];
   durationMinutes: number;
   notes?: string;
+  photos?: string[];
 }
 
 export type PlanCategoryType = 'work' | 'health' | 'learning' | 'personal' | 'rest' | (string & {});
@@ -126,4 +127,18 @@ export interface DayReview {
   gratitude: string;
   tomorrowFocus: string;
   wordCount: number;
+}
+
+export interface StickyNote {
+  _id: string;
+  title: string;
+  content: string;
+  color: 'yellow' | 'pink' | 'green' | 'blue' | 'purple' | 'orange' | 'teal' | 'gray' | 'dark';
+  position: {
+    x: number;
+    y: number;
+  };
+  isMinimized: boolean;
+  createdAt?: string;
+  updatedAt?: string;
 }
