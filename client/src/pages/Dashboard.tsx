@@ -43,7 +43,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onOpenCommandPalette }) =>
   // Local state
   const [pointsHistory, setPointsHistory] = useState<{ date: string; points: number }[]>([]);
   const [loadingHistory, setLoadingHistory] = useState(true);
-  const [dailyPointsTarget, setDailyPointsTarget] = useState(() => {
+  const [fallbackTarget, setFallbackTarget] = useState(() => {
     const saved = localStorage.getItem('dailyos-points-target');
     return saved ? parseInt(saved, 10) : 10;
   });
@@ -89,7 +89,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onOpenCommandPalette }) =>
 
   // Handle target change
   const savePointsTarget = (val: number) => {
-    setDailyPointsTarget(val);
+    setFallbackTarget(val);
     localStorage.setItem('dailyos-points-target', val.toString());
     setShowTargetEdit(false);
   };
@@ -99,20 +99,26 @@ export const Dashboard: React.FC<DashboardProps> = ({ onOpenCommandPalette }) =>
   const completedTasksToday = dailyLog?.tasks.filter((t) => t.completed).length || 0;
   const totalTasksToday = dailyLog?.tasks.length || 0;
 
+  const maxPointsPossible = dailyLog && dailyLog.date === selectedDate
+    ? dailyLog.tasks.reduce((sum, t) => sum + t.points, 0)
+    : 0;
+
+  const dailyPointsTarget = maxPointsPossible > 0 ? maxPointsPossible : fallbackTarget;
+
   const gymSessionsThisWeekCount = weeklySessions.length;
 
   const activeGoalsCount = goals.filter((g) => g.status === 'active').length;
 
   const totalCaloriesToday = meals.reduce((sum, meal) => sum + meal.totalCalories, 0);
 
-  const pointsPercentage = (pointsToday / dailyPointsTarget) * 100;
+  const pointsPercentage = dailyPointsTarget > 0 ? (pointsToday / dailyPointsTarget) * 100 : 0;
 
   if (dailyLoading && !dailyLog) {
     return <LoadingSpinner message="Initializing workspace telemetry..." />;
   }
 
   return (
-    <div className="p-6 space-y-6 select-none animate-fade-in pb-20 md:pb-6">
+    <div className="p-6 space-y-6 select-none animate-fade-in pb-6">
       {/* Upper Grid Layout: Date + Summary Circle */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-stretch">
         {/* Welcome and Header */}
@@ -177,13 +183,13 @@ export const Dashboard: React.FC<DashboardProps> = ({ onOpenCommandPalette }) =>
             <div className="text-center mt-3 font-mono">
               <span className="text-2xl font-bold text-off-white">{pointsToday}</span>
               <span className="text-off-white-muted mx-1">/</span>
-              {showTargetEdit ? (
+              {showTargetEdit && maxPointsPossible === 0 ? (
                 <input
                   type="number"
                   min="1"
                   max="100"
                   className="w-12 bg-darkbg border border-accent text-center text-off-white font-mono text-sm py-0.5 rounded outline-none"
-                  defaultValue={dailyPointsTarget}
+                  defaultValue={fallbackTarget}
                   onBlur={(e) => savePointsTarget(parseInt(e.target.value, 10) || 10)}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter') {
@@ -192,6 +198,13 @@ export const Dashboard: React.FC<DashboardProps> = ({ onOpenCommandPalette }) =>
                   }}
                   autoFocus
                 />
+              ) : maxPointsPossible > 0 ? (
+                <span
+                  className="text-sm font-semibold text-accent"
+                  title="Synced with total points of all daily tasks"
+                >
+                  {dailyPointsTarget}
+                </span>
               ) : (
                 <span
                   onClick={() => setShowTargetEdit(true)}
