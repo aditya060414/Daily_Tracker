@@ -91,7 +91,7 @@ export const TopBar: React.FC<TopBarProps> = ({ onOpenCommandPalette }) => {
               />
             ) : (
               <div className="w-7 h-7 rounded bg-accent/20 border border-accent/30 flex items-center justify-center text-accent font-bold text-xs uppercase">
-                {(user?.name || user?.email || 'U').charAt(0)}
+                {(user?.name || user?.username || user?.email || 'U').charAt(0)}
               </div>
             )}
             <ChevronDown className="w-3.5 h-3.5 text-off-white-muted" />
