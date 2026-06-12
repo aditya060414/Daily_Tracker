@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useFocusStore, useDailyStore, useDateStore } from '../store';
 import { Play, Pause, RotateCcw, CheckCircle2, Timer, Sparkles } from 'lucide-react';
 
@@ -16,9 +16,23 @@ export const Focus: React.FC = () => {
     pauseTimer,
     resetTimer,
     setMode,
+    setCustomDuration,
     setSelectedTaskId,
     tick,
   } = useFocusStore();
+
+  // Custom time setup local states
+  const [isSettingCustomTime, setIsSettingCustomTime] = useState(false);
+  const [customMin, setCustomMin] = useState<number>(45);
+
+  const handleSetCustom = () => {
+    if (customMin < 1 || customMin > 1440) {
+      alert('Please enter a valid time between 1 and 1440 minutes.');
+      return;
+    }
+    setCustomDuration(customMin * 60);
+    setIsSettingCustomTime(false);
+  };
 
   // Load today's log tasks to select
   useEffect(() => {
@@ -106,7 +120,7 @@ export const Focus: React.FC = () => {
   const strokeDashoffset = circumference - progressPercent * circumference;
 
   return (
-    <div className="p-6 flex flex-col items-center justify-center min-h-[calc(100vh-64px)] font-mono animate-fade-in text-off-white select-none pb-20 md:pb-6">
+    <div className="p-6 flex flex-col items-center justify-center min-h-[calc(100vh-64px)] font-mono animate-fade-in text-off-white select-none pb-6">
       <div className="w-full max-w-xl bg-panel border border-border rounded-lg p-6 flex flex-col items-center shadow-2xl relative overflow-hidden">
         {/* Glowing design background accent */}
         <div className="absolute top-0 left-1/2 -translate-x-1/2 w-64 h-[1px] bg-gradient-to-r from-transparent via-accent/30 to-transparent" />
@@ -123,11 +137,14 @@ export const Focus: React.FC = () => {
         </div>
 
         {/* Mode Selector Tabs */}
-        <div className="flex gap-2 bg-darkbg border border-border p-1 rounded mb-8 w-full">
+        <div className={`flex gap-2 bg-darkbg border border-border p-1 rounded w-full ${isSettingCustomTime ? 'mb-4' : 'mb-8'}`}>
           {(['focus', 'shortBreak', 'longBreak'] as const).map((m) => (
             <button
               key={m}
-              onClick={() => setMode(m)}
+              onClick={() => {
+                setMode(m);
+                setIsSettingCustomTime(false);
+              }}
               className={`flex-1 py-1.5 rounded text-[10px] font-bold uppercase tracking-wider transition-all duration-150 ${
                 mode === m
                   ? 'bg-accent/15 text-accent border border-accent/20 font-extrabold glow-accent'
@@ -137,7 +154,44 @@ export const Focus: React.FC = () => {
               {m === 'focus' ? 'Focus (25m)' : m === 'shortBreak' ? 'Short Break (5m)' : 'Long Break (15m)'}
             </button>
           ))}
+          <button
+            onClick={() => setIsSettingCustomTime(!isSettingCustomTime)}
+            className={`px-3 py-1.5 rounded text-[10px] font-bold uppercase tracking-wider transition-all duration-150 ${
+              mode === 'custom'
+                ? 'bg-accent/15 text-accent border border-accent/20 font-extrabold glow-accent'
+                : 'text-off-white-muted hover:text-off-white border border-transparent'
+            }`}
+          >
+            Custom
+          </button>
         </div>
+
+        {/* Custom Time Input Form */}
+        {isSettingCustomTime && (
+          <div className="flex items-center gap-2 bg-darkbg border border-border p-2 rounded mb-8 w-full animate-fade-in">
+            <span className="text-[10px] uppercase text-off-white-muted font-bold pl-2">Minutes:</span>
+            <input
+              type="number"
+              min="1"
+              max="1440"
+              value={customMin}
+              onChange={(e) => setCustomMin(parseInt(e.target.value) || 0)}
+              className="w-16 px-2 py-1 bg-card border border-border rounded text-xs text-off-white text-center outline-none focus:border-accent font-semibold"
+            />
+            <button
+              onClick={handleSetCustom}
+              className="px-3 py-1 bg-accent text-darkbg hover:bg-accent-dim hover:text-off-white rounded text-[10px] font-bold uppercase transition-colors ml-auto"
+            >
+              Apply
+            </button>
+            <button
+              onClick={() => setIsSettingCustomTime(false)}
+              className="px-3 py-1 bg-card hover:bg-card-dim border border-border rounded text-[10px] text-off-white-muted hover:text-off-white uppercase transition-colors"
+            >
+              Cancel
+            </button>
+          </div>
+        )}
 
         {/* Progress Ring with Time Left */}
         <div className="relative w-64 h-64 flex items-center justify-center mb-8">
@@ -171,7 +225,7 @@ export const Focus: React.FC = () => {
               {formatTime(timeLeft)}
             </span>
             <span className="text-[9px] uppercase tracking-widest text-off-white-muted mt-1">
-              {mode === 'focus' ? 'Focus Session' : 'Break Time'}
+              {mode === 'focus' ? 'Focus Session' : mode === 'custom' ? 'Custom Session' : 'Break Time'}
             </span>
           </div>
         </div>
