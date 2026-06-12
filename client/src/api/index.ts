@@ -12,6 +12,7 @@ import {
   TimeBlock,
   GymExercise,
   MealItem,
+  StickyNote,
 } from '../types';
 
 const api = axios.create({
@@ -164,7 +165,7 @@ export const gymApi = {
   },
   upsert: async (
     date: string,
-    data: { exercises: GymExercise[]; durationMinutes: number; notes: string }
+    data: { exercises: GymExercise[]; durationMinutes: number; notes: string; photos?: string[] }
   ) => {
     const res = await api.put<ApiResponse<GymSession>>(`/gym/${date}`, data);
     return res.data;
@@ -236,6 +237,10 @@ export const mealsApi = {
     const res = await api.delete<ApiResponse<Meal[]>>(`/meals/${date}/${mealType}`);
     return res.data;
   },
+  list: async () => {
+    const res = await api.get<ApiResponse<Meal[]>>('/meals');
+    return res.data;
+  },
 };
 
 export const reviewsApi = {
@@ -258,6 +263,25 @@ export const analyticsApi = {
     const res = await api.get<ApiResponse<{ date: string; points: number }[]>>('/analytics/points', {
       params: { range },
     });
+    return res.data;
+  },
+};
+
+export const stickyNotesApi = {
+  getAll: async () => {
+    const res = await api.get<ApiResponse<StickyNote[]>>('/sticky-notes');
+    return res.data;
+  },
+  create: async (note: Omit<StickyNote, '_id' | 'createdAt' | 'updatedAt'>) => {
+    const res = await api.post<ApiResponse<StickyNote>>('/sticky-notes', note);
+    return res.data;
+  },
+  update: async (id: string, note: Partial<Omit<StickyNote, '_id' | 'createdAt' | 'updatedAt'>>) => {
+    const res = await api.put<ApiResponse<StickyNote>>(`/sticky-notes/${id}`, note);
+    return res.data;
+  },
+  delete: async (id: string) => {
+    const res = await api.delete<ApiResponse<{ id: string }>>(`/sticky-notes/${id}`);
     return res.data;
   },
 };
