@@ -13,6 +13,7 @@ import {
   TimeBlock,
   GymExercise,
   MealItem,
+  StickyNote,
 } from '../types';
 import {
   dailyTasksApi,
@@ -22,6 +23,7 @@ import {
   goalsApi,
   mealsApi,
   reviewsApi,
+  stickyNotesApi,
 } from '../api';
 
 // ----------------------------------------------------
@@ -223,13 +225,15 @@ export const useDailyStore = create<DailyState>((set, get) => ({
 interface GymState {
   session: GymSession | null;
   weeklySessions: GymSession[];
+  historySessions: GymSession[];
   loading: boolean;
   error: string | null;
   fetchSession: (date: string) => Promise<void>;
   fetchWeeklySessions: (startDate: string, endDate: string) => Promise<void>;
+  fetchHistorySessions: () => Promise<void>;
   saveSession: (
     date: string,
-    data: { exercises: GymExercise[]; durationMinutes: number; notes: string }
+    data: { exercises: GymExercise[]; durationMinutes: number; notes: string; photos?: string[] }
   ) => Promise<void>;
   deleteSession: (date: string) => Promise<void>;
 }
@@ -237,6 +241,7 @@ interface GymState {
 export const useGymStore = create<GymState>((set) => ({
   session: null,
   weeklySessions: [],
+  historySessions: [],
   loading: false,
   error: null,
 
@@ -256,6 +261,15 @@ export const useGymStore = create<GymState>((set) => ({
       set({ weeklySessions: res.data });
     } catch (err: any) {
       set({ error: err.response?.data?.error || 'Failed to fetch weekly workout summary' });
+    }
+  },
+
+  fetchHistorySessions: async () => {
+    try {
+      const res = await gymApi.list();
+      set({ historySessions: res.data });
+    } catch (err: any) {
+      set({ error: err.response?.data?.error || 'Failed to fetch workout history log' });
     }
   },
 
@@ -556,21 +570,23 @@ interface FocusState {
   timeLeft: number;
   duration: number;
   isRunning: boolean;
-  mode: 'focus' | 'shortBreak' | 'longBreak';
+  mode: 'focus' | 'shortBreak' | 'longBreak' | 'custom';
   selectedTaskId: string | null;
   targetEndTime: number | null;
   startTimer: () => void;
   pauseTimer: () => void;
   resetTimer: () => void;
-  setMode: (mode: 'focus' | 'shortBreak' | 'longBreak') => void;
+  setMode: (mode: 'focus' | 'shortBreak' | 'longBreak' | 'custom') => void;
+  setCustomDuration: (seconds: number) => void;
   setSelectedTaskId: (id: string | null) => void;
   tick: () => void;
 }
 
-const getDurationByMode = (mode: 'focus' | 'shortBreak' | 'longBreak') => {
+const getDurationByMode = (mode: 'focus' | 'shortBreak' | 'longBreak' | 'custom', currentDuration: number = 25 * 60) => {
   if (mode === 'focus') return 25 * 60;
   if (mode === 'shortBreak') return 5 * 60;
-  return 15 * 60;
+  if (mode === 'longBreak') return 15 * 60;
+  return currentDuration;
 };
 
 export const useFocusStore = create<FocusState>()(
@@ -606,8 +622,8 @@ export const useFocusStore = create<FocusState>()(
       },
 
       resetTimer: () => {
-        const { mode } = get();
-        const dur = getDurationByMode(mode);
+        const { mode, duration } = get();
+        const dur = getDurationByMode(mode, duration);
         set({
           isRunning: false,
           timeLeft: dur,
@@ -617,12 +633,22 @@ export const useFocusStore = create<FocusState>()(
       },
 
       setMode: (mode) => {
-        const dur = getDurationByMode(mode);
+        const dur = getDurationByMode(mode, get().duration);
         set({
           mode,
           isRunning: false,
           timeLeft: dur,
           duration: dur,
+          targetEndTime: null,
+        });
+      },
+
+      setCustomDuration: (seconds) => {
+        set({
+          mode: 'custom',
+          isRunning: false,
+          timeLeft: seconds,
+          duration: seconds,
           targetEndTime: null,
         });
       },
@@ -650,4 +676,168 @@ export const useFocusStore = create<FocusState>()(
     }
   )
 );
+
+// ----------------------------------------------------
+// STICKY NOTES STORE (With debounced backend sync & auth subscribe)
+// ----------------------------------------------------
+interface StickyState {
+  notes: StickyNote[];
+  loading: boolean;
+  error: string | null;
+  fetchNotes: () => Promise<void>;
+  addNote: () => Promise<void>;
+  updateNote: (id: string, fields: Partial<Omit<StickyNote, '_id' | 'createdAt' | 'updatedAt'>>) => void;
+  deleteNote: (id: string) => Promise<void>;
+  setPosition: (id: string, x: number, y: number) => void;
+  toggleMinimize: (id: string) => void;
+  clearStore: () => void;
+}
+
+const pendingSyncs = new Map<string, any>();
+
+const debounceSync = (id: string, syncFn: () => Promise<void>) => {
+  if (pendingSyncs.has(id)) {
+    clearTimeout(pendingSyncs.get(id));
+  }
+  const timeout = setTimeout(async () => {
+    pendingSyncs.delete(id);
+    try {
+      await syncFn();
+    } catch (err) {
+      console.error(`Failed to sync note ${id}:`, err);
+    }
+  }, 800);
+  pendingSyncs.set(id, timeout);
+};
+
+export const useStickyStore = create<StickyState>()(
+  persist(
+    (set, get) => ({
+      notes: [],
+      loading: false,
+      error: null,
+
+      fetchNotes: async () => {
+        set({ loading: true, error: null });
+        try {
+          const res = await stickyNotesApi.getAll();
+          set({ notes: res.data, loading: false });
+        } catch (err: any) {
+          set({ error: err.response?.data?.error || 'Failed to fetch sticky notes', loading: false });
+        }
+      },
+
+      addNote: async () => {
+        const tempId = `temp-${Date.now()}`;
+        const newNote: StickyNote = {
+          _id: tempId,
+          title: 'Untitled Note',
+          content: '',
+          color: 'yellow',
+          position: { x: 50, y: 50 },
+          isMinimized: false,
+        };
+
+        // Instantly add to local state
+        set((state) => ({ notes: [newNote, ...state.notes] }));
+
+        try {
+          const res = await stickyNotesApi.create({
+            title: newNote.title,
+            content: newNote.content,
+            color: newNote.color,
+            position: newNote.position,
+            isMinimized: newNote.isMinimized,
+          });
+
+          if (res.success && res.data) {
+            // Swap temporary ID with DB ID
+            set((state) => ({
+              notes: state.notes.map((n) => (n._id === tempId ? res.data : n)),
+            }));
+          }
+        } catch (err: any) {
+          set({ error: err.response?.data?.error || 'Failed to sync new note' });
+        }
+      },
+
+      updateNote: (id, fields) => {
+        // Optimistic update
+        set((state) => ({
+          notes: state.notes.map((n) => (n._id === id ? { ...n, ...fields } : n)),
+        }));
+
+        // If it's a temporary ID, we don't sync yet (creation request will save the latest state or subsequent updates will trigger)
+        if (id.startsWith('temp-')) {
+          return;
+        }
+
+        debounceSync(id, async () => {
+          // Fetch current note state to sync the fields
+          const currentNote = get().notes.find((n) => n._id === id);
+          if (!currentNote) return;
+
+          await stickyNotesApi.update(id, {
+            title: currentNote.title,
+            content: currentNote.content,
+            color: currentNote.color,
+            position: currentNote.position,
+            isMinimized: currentNote.isMinimized,
+          });
+        });
+      },
+
+      deleteNote: async (id) => {
+        // Clear any pending syncs
+        if (pendingSyncs.has(id)) {
+          clearTimeout(pendingSyncs.get(id));
+          pendingSyncs.delete(id);
+        }
+
+        // Optimistic remove
+        set((state) => ({ notes: state.notes.filter((n) => n._id !== id) }));
+
+        if (id.startsWith('temp-')) {
+          return;
+        }
+
+        try {
+          await stickyNotesApi.delete(id);
+        } catch (err: any) {
+          set({ error: err.response?.data?.error || 'Failed to delete note' });
+        }
+      },
+
+      setPosition: (id, x, y) => {
+        get().updateNote(id, { position: { x, y } });
+      },
+
+      toggleMinimize: (id) => {
+        const note = get().notes.find((n) => n._id === id);
+        if (note) {
+          get().updateNote(id, { isMinimized: !note.isMinimized });
+        }
+      },
+
+      clearStore: () => {
+        // Cancel all pending timeouts
+        for (const timeout of pendingSyncs.values()) {
+          clearTimeout(timeout);
+        }
+        pendingSyncs.clear();
+        set({ notes: [], error: null, loading: false });
+      },
+    }),
+    {
+      name: 'dailyos-sticky-notes',
+    }
+  )
+);
+
+// Subscribe to auth state to wipe data upon logout
+useAuthStore.subscribe((state) => {
+  if (!state.isAuthenticated) {
+    useStickyStore.getState().clearStore();
+  }
+});
 
