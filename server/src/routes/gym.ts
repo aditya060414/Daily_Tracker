@@ -45,7 +45,7 @@ router.get('/:date', async (req: AuthenticatedRequest, res, next) => {
 router.put('/:date', async (req: AuthenticatedRequest, res, next) => {
   try {
     const { date } = req.params;
-    const { exercises, durationMinutes, notes } = req.body;
+    const { exercises, durationMinutes, notes, photos } = req.body;
     const userId = req.user!.userId;
 
     const session = await GymSession.findOneAndUpdate(
@@ -55,6 +55,7 @@ router.put('/:date', async (req: AuthenticatedRequest, res, next) => {
         exercises: exercises || [],
         durationMinutes: durationMinutes || 0,
         notes: notes || '',
+        photos: photos || [],
       },
       { new: true, upsert: true, runValidators: true }
     );
