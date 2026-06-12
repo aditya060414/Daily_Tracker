@@ -121,7 +121,7 @@ export const DailyReview: React.FC = () => {
   }
 
   return (
-    <div className="p-6 grid grid-cols-1 xl:grid-cols-12 gap-6 select-none animate-fade-in pb-20 md:pb-6">
+    <div className="p-6 grid grid-cols-1 xl:grid-cols-12 gap-6 select-none animate-fade-in pb-6">
       {/* REVIEW FORM: Highlights, Challenges, Gratitude, Tomorrow Focus (8 cols) */}
       <div className="xl:col-span-8 bg-panel border border-border rounded-lg p-5 space-y-6 flex flex-col">
         {/* Header */}
