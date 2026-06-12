@@ -5,6 +5,7 @@ import { authApi } from './api';
 import { Sidebar } from './components/Sidebar';
 import { TopBar } from './components/TopBar';
 import { CommandPalette } from './components/CommandPalette';
+import { StickyNotesLayer } from './components/StickyNotesLayer';
 
 // Pages
 import { Login } from './pages/Login';
@@ -57,6 +58,9 @@ const DashboardLayout: React.FC = () => {
 
       {/* Floating command palette overlay */}
       <CommandPalette isOpen={isCommandPaletteOpen} onClose={() => setIsCommandPaletteOpen(false)} />
+
+      {/* Global floating sticky notes system */}
+      <StickyNotesLayer />
     </div>
   );
 };
