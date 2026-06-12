@@ -5,6 +5,19 @@ import { authenticateToken, AuthenticatedRequest } from '../middleware/auth';
 const router = Router();
 router.use(authenticateToken);
 
+// GET /api/v1/meals - Get all meal logs for user
+router.get('/', async (req: AuthenticatedRequest, res, next) => {
+  try {
+    const meals = await Meal.find({ userId: req.user!.userId }).sort({ date: -1 });
+    return res.json({
+      success: true,
+      data: meals,
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
 // GET /api/v1/meals/:date - Get all meal segments for a date for user
 router.get('/:date', async (req: AuthenticatedRequest, res, next) => {
   try {
