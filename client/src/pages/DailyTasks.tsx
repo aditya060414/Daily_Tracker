@@ -222,7 +222,7 @@ export const DailyTasks: React.FC = () => {
   }
 
   return (
-    <div className="p-6 grid grid-cols-1 xl:grid-cols-12 gap-6 select-none animate-fade-in pb-20 md:pb-6">
+    <div className="p-6 grid grid-cols-1 xl:grid-cols-12 gap-6 select-none animate-fade-in pb-6">
       {/* LEFT COLUMN: Template Library (5 cols) */}
       <div className="xl:col-span-5 space-y-6 flex flex-col">
         {/* Template Form */}
@@ -484,7 +484,7 @@ export const DailyTasks: React.FC = () => {
             dailyLog?.tasks.map((task) => (
               <div
                 key={task._id}
-                className={`flex items-center justify-between p-3.5 border rounded transition-all duration-200 ${
+                className={`flex items-center justify-between p-3.5 border rounded transition-all duration-200 animate-item-log ${
                   task.completed
                     ? 'bg-card/30 border-border/40 text-off-white-muted line-through opacity-70'
                     : 'bg-card border-border hover:border-accent/40'
