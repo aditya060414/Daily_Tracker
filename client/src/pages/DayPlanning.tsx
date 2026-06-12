@@ -201,7 +201,7 @@ export const DayPlanning: React.FC = () => {
   }
 
   return (
-    <div className="p-6 grid grid-cols-1 lg:grid-cols-12 gap-6 select-none animate-fade-in pb-20 md:pb-6">
+    <div className="p-6 grid grid-cols-1 lg:grid-cols-12 gap-6 select-none animate-fade-in pb-6">
       {/* TIMELINE SHEET & NOTES (8 cols) */}
       <div className="lg:col-span-8 flex flex-col gap-6">
         {/* TIMELINE SHEET */}
