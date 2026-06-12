@@ -15,6 +15,7 @@ export interface IGymSession extends Document {
   exercises: IGymExercise[];
   durationMinutes: number;
   notes?: string;
+  photos?: string[];
 }
 
 const gymExerciseSchema = new Schema<IGymExercise>({
@@ -32,6 +33,7 @@ const gymSessionSchema = new Schema<IGymSession>({
   exercises: [gymExerciseSchema],
   durationMinutes: { type: Number, default: 0 },
   notes: { type: String, default: '' },
+  photos: { type: [String], default: [] },
 }, { timestamps: true });
 
 // Ensure unique sessions per user per date
