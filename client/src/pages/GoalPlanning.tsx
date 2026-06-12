@@ -187,7 +187,7 @@ export const GoalPlanning: React.FC = () => {
   }
 
   return (
-    <div className="p-6 space-y-6 select-none animate-fade-in pb-20 md:pb-6">
+    <div className="p-6 space-y-6 select-none animate-fade-in pb-6">
       {/* Header controls */}
       <div className="bg-panel border border-border rounded-lg p-5 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4">
         <div className="flex items-center gap-2">
