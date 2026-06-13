@@ -14,6 +14,7 @@ import {
   GymExercise,
   MealItem,
   StickyNote,
+  SkincareLog,
 } from '../types';
 import {
   dailyTasksApi,
@@ -24,6 +25,7 @@ import {
   mealsApi,
   reviewsApi,
   stickyNotesApi,
+  skincareApi,
 } from '../api';
 
 // ----------------------------------------------------
@@ -840,4 +842,74 @@ useAuthStore.subscribe((state) => {
     useStickyStore.getState().clearStore();
   }
 });
+
+// ----------------------------------------------------
+// SKINCARE STORE
+// ----------------------------------------------------
+interface SkincareState {
+  skincareLog: SkincareLog | null;
+  skincareHistory: SkincareLog[];
+  loading: boolean;
+  error: string | null;
+  fetchSkincareLog: (date: string) => Promise<void>;
+  updateSkincareLog: (date: string, data: Partial<Omit<SkincareLog, '_id' | 'date'>>) => Promise<void>;
+  fetchSkincareHistory: () => Promise<void>;
+}
+
+export const useSkincareStore = create<SkincareState>((set, get) => ({
+  skincareLog: null,
+  skincareHistory: [],
+  loading: false,
+  error: null,
+
+  fetchSkincareLog: async (date) => {
+    set({ loading: true, error: null });
+    try {
+      const res = await skincareApi.get(date);
+      set({ skincareLog: res.data, loading: false });
+    } catch (err: any) {
+      set({ error: err.response?.data?.error || 'Failed to fetch skincare log', loading: false });
+    }
+  },
+
+  updateSkincareLog: async (date, data) => {
+    // Optimistic local state update to ensure UI response is fast
+    const currentLog = get().skincareLog;
+    if (currentLog && currentLog.date === date) {
+      set({ skincareLog: { ...currentLog, ...data } });
+    }
+
+    try {
+      const res = await skincareApi.update(date, data);
+      set({ skincareLog: res.data, error: null });
+      
+      // Sync history if it exists
+      const history = get().skincareHistory;
+      if (history.length > 0) {
+        const index = history.findIndex((h) => h.date === date);
+        if (index > -1) {
+          const updated = [...history];
+          updated[index] = res.data;
+          set({ skincareHistory: updated });
+        }
+      }
+    } catch (err: any) {
+      // Rollback to original if server request fails
+      if (currentLog) {
+        set({ skincareLog: currentLog });
+      }
+      set({ error: err.response?.data?.error || 'Failed to update skincare log' });
+    }
+  },
+
+  fetchSkincareHistory: async () => {
+    set({ error: null });
+    try {
+      const res = await skincareApi.getHistory();
+      set({ skincareHistory: res.data });
+    } catch (err: any) {
+      set({ error: err.response?.data?.error || 'Failed to fetch skincare history' });
+    }
+  },
+}));
 
