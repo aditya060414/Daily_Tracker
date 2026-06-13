@@ -8,6 +8,7 @@ import { DayPlan } from './models/DayPlan';
 import { Goal } from './models/Goal';
 import { Meal } from './models/Meal';
 import { DayReview } from './models/DayReview';
+import { SkincareLog } from './models/SkincareLog';
 import dotenv from 'dotenv';
 
 dotenv.config();
@@ -30,6 +31,7 @@ const cleanDatabase = async () => {
     await Goal.deleteMany({});
     await Meal.deleteMany({});
     await DayReview.deleteMany({});
+    await SkincareLog.deleteMany({});
 
     console.log('Collections cleared. Seeding default admin user...');
 
