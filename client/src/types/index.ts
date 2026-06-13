@@ -142,3 +142,22 @@ export interface StickyNote {
   createdAt?: string;
   updatedAt?: string;
 }
+
+export interface SkincareRoutineItem {
+  step: string;
+  productName: string;
+  completed: boolean;
+}
+
+export interface SkincareLog {
+  _id: string;
+  date: string;
+  amRoutine: SkincareRoutineItem[];
+  pmRoutine: SkincareRoutineItem[];
+  skinRating: number;
+  hydration: number;
+  oiliness: number;
+  acne: number;
+  redness: boolean;
+  notes: string;
+}
