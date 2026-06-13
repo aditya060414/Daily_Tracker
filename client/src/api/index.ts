@@ -13,6 +13,7 @@ import {
   GymExercise,
   MealItem,
   StickyNote,
+  SkincareLog,
 } from '../types';
 
 const api = axios.create({
@@ -282,6 +283,21 @@ export const stickyNotesApi = {
   },
   delete: async (id: string) => {
     const res = await api.delete<ApiResponse<{ id: string }>>(`/sticky-notes/${id}`);
+    return res.data;
+  },
+};
+
+export const skincareApi = {
+  get: async (date: string) => {
+    const res = await api.get<ApiResponse<SkincareLog>>(`/skincare/${date}`);
+    return res.data;
+  },
+  update: async (date: string, data: Partial<Omit<SkincareLog, '_id' | 'date'>>) => {
+    const res = await api.put<ApiResponse<SkincareLog>>(`/skincare/${date}`, data);
+    return res.data;
+  },
+  getHistory: async () => {
+    const res = await api.get<ApiResponse<SkincareLog[]>>('/skincare/history');
     return res.data;
   },
 };
