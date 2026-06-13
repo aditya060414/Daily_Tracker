@@ -103,6 +103,17 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({ isOpen, onClose 
       },
     },
     {
+      id: 'skincare',
+      title: 'Go to Skin Care',
+      subtitle: 'Track AM/PM routine, skin health rating, hydration, acne, and notes',
+      category: 'Navigation',
+      icon: <Sparkles className="w-4 h-4" />,
+      action: () => {
+        navigate('/skincare');
+        onClose();
+      },
+    },
+    {
       id: 'review',
       title: 'Go to Daily Review',
       subtitle: 'Write down Highlights, Challenges, Gratitude, and check streaks',
