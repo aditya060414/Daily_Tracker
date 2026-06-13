@@ -17,6 +17,7 @@ import { GoalPlanning } from './pages/GoalPlanning';
 import { Meals } from './pages/Meals';
 import { DailyReview } from './pages/DailyReview';
 import { Focus } from './pages/Focus';
+import { SkincareTracker } from './pages/SkincareTracker';
 
 // Authenticated Route Shell
 const DashboardLayout: React.FC = () => {
@@ -156,6 +157,7 @@ export const App: React.FC = () => {
           <Route path="meals" element={<Meals />} />
           <Route path="review" element={<DailyReview />} />
           <Route path="focus" element={<Focus />} />
+          <Route path="skincare" element={<SkincareTracker />} />
         </Route>
 
         {/* Fallback to root index */}
