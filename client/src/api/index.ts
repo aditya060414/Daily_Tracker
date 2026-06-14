@@ -14,6 +14,9 @@ import {
   MealItem,
   StickyNote,
   SkincareLog,
+  FocusSession,
+  FocusAnalytics,
+  Achievement,
 } from '../types';
 
 const api = axios.create({
@@ -298,6 +301,37 @@ export const skincareApi = {
   },
   getHistory: async () => {
     const res = await api.get<ApiResponse<SkincareLog[]>>('/skincare/history');
+    return res.data;
+  },
+};
+
+export const focusApi = {
+  completeSession: async (data: {
+    taskId?: string | null;
+    goalId?: string | null;
+    sessionType: 'focus' | 'shortBreak' | 'longBreak' | 'custom';
+    duration: number;
+    completed: boolean;
+    startedAt: string;
+    endedAt: string;
+    date: string;
+  }) => {
+    const res = await api.post<ApiResponse<{
+      session: FocusSession;
+      dailyLog: DailyLog;
+      goal: Goal | null;
+      user: User;
+    }>>('/focus/session', data);
+    return res.data;
+  },
+  getAnalytics: async (date?: string) => {
+    const res = await api.get<ApiResponse<FocusAnalytics>>('/focus/analytics', {
+      params: { date },
+    });
+    return res.data;
+  },
+  getAchievements: async () => {
+    const res = await api.get<ApiResponse<Achievement[]>>('/focus/achievements');
     return res.data;
   },
 };

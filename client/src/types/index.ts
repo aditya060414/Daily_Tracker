@@ -8,6 +8,12 @@ export interface User {
   loginMethod: 'email' | 'google';
   lastLogin?: string;
   username?: string; // For backward compatibility with existing views
+  dailyFocusStreak: number;
+  weeklyDeepWorkStreak: number;
+  longestFocusStreak: number;
+  lastFocusedDate?: string;
+  totalFocusHours: number;
+  achievements: string[];
 }
 
 export type CategoryType = 'health' | 'work' | 'learning' | 'personal' | (string & {});
@@ -35,6 +41,7 @@ export interface DailyLog {
   _id: string;
   date: string;
   tasks: LogTask[];
+  focusPoints: number;
   totalPoints: number;
   notes?: string;
   createdAt?: string;
@@ -160,4 +167,42 @@ export interface SkincareLog {
   acne: number;
   redness: boolean;
   notes: string;
+}
+
+export interface FocusSession {
+  _id: string;
+  userId: string;
+  taskId?: string;
+  goalId?: string;
+  sessionType: 'focus' | 'shortBreak' | 'longBreak' | 'custom';
+  duration: number; // in seconds
+  completed: boolean;
+  startedAt: string;
+  endedAt: string;
+  pointsEarned: number;
+  createdAt?: string;
+}
+
+export interface FocusChartData {
+  dailyFocusHours: { date: string; hours: number }[];
+  weeklyFocusTrend: { week: string; hours: number }[];
+  monthlyDeepWorkTrend: { month: string; hours: number }[];
+}
+
+export interface FocusAnalytics {
+  todayFocusTime: number; // in seconds
+  weeklyFocusTime: number; // in seconds
+  monthlyFocusTime: number; // in seconds
+  totalSessions: number;
+  longestSession: number; // in seconds
+  averageSessionLength: number; // in seconds
+  charts: FocusChartData;
+}
+
+export interface Achievement {
+  id: string;
+  title: string;
+  description: string;
+  icon: string;
+  unlocked: boolean;
 }
