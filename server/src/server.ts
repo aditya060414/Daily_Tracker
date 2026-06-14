@@ -19,6 +19,7 @@ import reviewsRouter from './routes/reviews';
 import analyticsRouter from './routes/analytics';
 import stickyNotesRouter from './routes/stickyNotes';
 import skincareRouter from './routes/skincare';
+import focusRouter from './routes/focus';
 
 dotenv.config();
 
@@ -73,6 +74,7 @@ app.use('/api/v1/reviews', reviewsRouter);
 app.use('/api/v1/analytics', analyticsRouter);
 app.use('/api/v1/sticky-notes', stickyNotesRouter);
 app.use('/api/v1/skincare', skincareRouter);
+app.use('/api/v1/focus', focusRouter);
 
 // Root route for sanity check
 app.get('/', (req, res) => {

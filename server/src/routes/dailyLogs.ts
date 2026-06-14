@@ -9,9 +9,10 @@ router.use(authenticateToken);
 
 // Helper function to recalculate points
 const recalculatePoints = (log: any) => {
-  log.totalPoints = log.tasks.reduce((sum: number, task: ILogTask) => {
+  const taskPoints = log.tasks.reduce((sum: number, task: ILogTask) => {
     return sum + (task.completed ? task.points : 0);
   }, 0);
+  log.totalPoints = taskPoints + (log.focusPoints || 0);
 };
 
 // GET /api/v1/daily-logs/:date - Get (or create & populate) daily log for a date (format: YYYY-MM-DD)
