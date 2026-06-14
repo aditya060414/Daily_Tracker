@@ -13,6 +13,7 @@ export interface IDailyLog extends Document {
   userId: Types.ObjectId;
   date: string; // YYYY-MM-DD
   tasks: ILogTask[];
+  focusPoints: number;
   totalPoints: number;
   notes?: string;
 }
@@ -30,6 +31,7 @@ const dailyLogSchema = new Schema<IDailyLog>({
   userId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
   date: { type: String, required: true }, // Format YYYY-MM-DD
   tasks: [logTaskSchema],
+  focusPoints: { type: Number, default: 0, required: true },
   totalPoints: { type: Number, default: 0, required: true },
   notes: { type: String, default: '' },
 }, { timestamps: true });

@@ -9,6 +9,12 @@ export interface IUser extends Document {
   isVerified: boolean;
   loginMethod: 'email' | 'google';
   lastLogin?: Date;
+  dailyFocusStreak: number;
+  weeklyDeepWorkStreak: number;
+  longestFocusStreak: number;
+  lastFocusedDate?: string;
+  totalFocusHours: number;
+  achievements: string[];
   createdAt: Date;
   updatedAt: Date;
 }
@@ -28,6 +34,12 @@ const userSchema = new Schema<IUser>({
   isVerified: { type: Boolean, default: false },
   loginMethod: { type: String, enum: ['email', 'google'], default: 'email' },
   lastLogin: { type: Date },
+  dailyFocusStreak: { type: Number, default: 0 },
+  weeklyDeepWorkStreak: { type: Number, default: 0 },
+  longestFocusStreak: { type: Number, default: 0 },
+  lastFocusedDate: { type: String, default: '' },
+  totalFocusHours: { type: Number, default: 0 },
+  achievements: { type: [String], default: [] },
 }, { timestamps: true });
 
 export const User = model<IUser>('User', userSchema);
