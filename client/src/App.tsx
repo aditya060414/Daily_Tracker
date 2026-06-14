@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { BrowserRouter, Routes, Route, Navigate, Outlet } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, Outlet, useLocation } from 'react-router-dom';
 import { useAuthStore } from './store';
 import { authApi } from './api';
 import { Sidebar } from './components/Sidebar';
@@ -23,6 +23,7 @@ import { SkincareTracker } from './pages/SkincareTracker';
 const DashboardLayout: React.FC = () => {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
+  const location = useLocation();
 
   // Global keydown listener for Ctrl+K / Cmd+K
   useEffect(() => {
@@ -40,28 +41,32 @@ const DashboardLayout: React.FC = () => {
     return <Navigate to="/login" replace />;
   }
 
+  const isFocusRoute = location.pathname === '/focus';
+
   return (
     <div className="min-h-screen flex flex-col md:flex-row bg-darkbg text-off-white select-none">
       {/* Navigation Left Sidebar */}
-      <Sidebar />
+      {!isFocusRoute && <Sidebar />}
 
       {/* Main Core Window Panel */}
       <div className="flex-1 flex flex-col min-h-screen overflow-x-hidden">
         {/* Sticky top system banner */}
-        <TopBar onOpenCommandPalette={() => setIsCommandPaletteOpen(true)} />
+        {!isFocusRoute && <TopBar onOpenCommandPalette={() => setIsCommandPaletteOpen(true)} />}
 
         {/* Scrollable page panels */}
-        <main className="flex-grow overflow-y-auto pb-16 md:pb-0">
+        <main className={`flex-grow overflow-y-auto ${isFocusRoute ? 'pb-0' : 'pb-16 md:pb-0'}`}>
           {/* Page outlet router */}
           <Outlet context={{ onOpenCommandPalette: () => setIsCommandPaletteOpen(true) }} />
         </main>
       </div>
 
       {/* Floating command palette overlay */}
-      <CommandPalette isOpen={isCommandPaletteOpen} onClose={() => setIsCommandPaletteOpen(false)} />
+      {!isFocusRoute && (
+        <CommandPalette isOpen={isCommandPaletteOpen} onClose={() => setIsCommandPaletteOpen(false)} />
+      )}
 
       {/* Global floating sticky notes system */}
-      <StickyNotesLayer />
+      {!isFocusRoute && <StickyNotesLayer />}
     </div>
   );
 };
