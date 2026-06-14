@@ -15,6 +15,8 @@ import {
   MealItem,
   StickyNote,
   SkincareLog,
+  FocusAnalytics,
+  Achievement,
 } from '../types';
 import {
   dailyTasksApi,
@@ -26,6 +28,7 @@ import {
   reviewsApi,
   stickyNotesApi,
   skincareApi,
+  focusApi,
 } from '../api';
 
 // ----------------------------------------------------
@@ -574,14 +577,26 @@ interface FocusState {
   isRunning: boolean;
   mode: 'focus' | 'shortBreak' | 'longBreak' | 'custom';
   selectedTaskId: string | null;
+  selectedGoalId: string | null;
+  priorityLevel: 'low' | 'medium' | 'high' | null;
   targetEndTime: number | null;
+  sessionStartTime: number | null;
+  analytics: FocusAnalytics | null;
+  achievements: Achievement[];
+  loading: boolean;
+  error: string | null;
   startTimer: () => void;
   pauseTimer: () => void;
   resetTimer: () => void;
   setMode: (mode: 'focus' | 'shortBreak' | 'longBreak' | 'custom') => void;
   setCustomDuration: (seconds: number) => void;
   setSelectedTaskId: (id: string | null) => void;
+  setSelectedGoalId: (id: string | null) => void;
+  setPriorityLevel: (level: 'low' | 'medium' | 'high' | null) => void;
   tick: () => void;
+  fetchAnalytics: (date: string) => Promise<void>;
+  fetchAchievements: () => Promise<void>;
+  saveFocusSession: (date: string, completed: boolean) => Promise<void>;
 }
 
 const getDurationByMode = (mode: 'focus' | 'shortBreak' | 'longBreak' | 'custom', currentDuration: number = 25 * 60) => {
@@ -599,13 +614,21 @@ export const useFocusStore = create<FocusState>()(
       isRunning: false,
       mode: 'focus',
       selectedTaskId: null,
+      selectedGoalId: null,
+      priorityLevel: null,
       targetEndTime: null,
+      sessionStartTime: null,
+      analytics: null,
+      achievements: [],
+      loading: false,
+      error: null,
 
       startTimer: () => {
-        const { timeLeft } = get();
+        const { timeLeft, sessionStartTime } = get();
         set({
           isRunning: true,
           targetEndTime: Date.now() + timeLeft * 1000,
+          sessionStartTime: sessionStartTime || Date.now(),
         });
       },
 
@@ -631,6 +654,7 @@ export const useFocusStore = create<FocusState>()(
           timeLeft: dur,
           duration: dur,
           targetEndTime: null,
+          sessionStartTime: null,
         });
       },
 
@@ -642,6 +666,7 @@ export const useFocusStore = create<FocusState>()(
           timeLeft: dur,
           duration: dur,
           targetEndTime: null,
+          sessionStartTime: null,
         });
       },
 
@@ -652,10 +677,13 @@ export const useFocusStore = create<FocusState>()(
           timeLeft: seconds,
           duration: seconds,
           targetEndTime: null,
+          sessionStartTime: null,
         });
       },
 
       setSelectedTaskId: (id) => set({ selectedTaskId: id }),
+      setSelectedGoalId: (id) => set({ selectedGoalId: id }),
+      setPriorityLevel: (level) => set({ priorityLevel: level }),
 
       tick: () => {
         const { isRunning, targetEndTime } = get();
@@ -672,9 +700,96 @@ export const useFocusStore = create<FocusState>()(
           set({ timeLeft: remaining });
         }
       },
+
+      fetchAnalytics: async (date) => {
+        try {
+          const res = await focusApi.getAnalytics(date);
+          if (res.success && res.data) {
+            set({ analytics: res.data });
+          }
+        } catch (err: any) {
+          console.error('Failed to fetch focus analytics:', err);
+        }
+      },
+
+      fetchAchievements: async () => {
+        try {
+          const res = await focusApi.getAchievements();
+          if (res.success && res.data) {
+            set({ achievements: res.data });
+          }
+        } catch (err: any) {
+          console.error('Failed to fetch achievements:', err);
+        }
+      },
+
+      saveFocusSession: async (date, completed) => {
+        const { mode, duration, timeLeft, selectedTaskId, selectedGoalId, sessionStartTime } = get();
+        const startTimestamp = sessionStartTime || (Date.now() - (duration - timeLeft) * 1000);
+        const endTimestamp = Date.now();
+        const actualDuration = Math.max(0, Math.round((endTimestamp - startTimestamp) / 1000));
+
+        set({ loading: true, error: null });
+        try {
+          const res = await focusApi.completeSession({
+            taskId: selectedTaskId,
+            goalId: selectedGoalId,
+            sessionType: mode,
+            duration: completed ? duration : actualDuration,
+            completed,
+            startedAt: new Date(startTimestamp).toISOString(),
+            endedAt: new Date(endTimestamp).toISOString(),
+            date,
+          });
+
+          if (res.success && res.data) {
+            const { dailyLog, goal, user } = res.data;
+
+            // Sync with other Zustand stores instantly for real-time dashboard updates
+            useDailyStore.setState({ dailyLog });
+            useAuthStore.setState({ user });
+            
+            if (goal) {
+              const currentGoals = useGoalsStore.getState().goals;
+              useGoalsStore.setState({
+                goals: currentGoals.map((g) => (g._id === goal._id ? goal : g)),
+              });
+            }
+
+            // Reset selected states upon completion
+            if (completed) {
+              set({
+                selectedTaskId: null,
+                selectedGoalId: null,
+                priorityLevel: null,
+                sessionStartTime: null,
+              });
+            }
+
+            // Sync statistics instantly
+            await get().fetchAnalytics(date);
+            await get().fetchAchievements();
+          }
+        } catch (err: any) {
+          set({ error: err.response?.data?.error || 'Failed to save focus session' });
+        } finally {
+          set({ loading: false });
+        }
+      },
     }),
     {
       name: 'dailyos-focus',
+      partialize: (state) => ({
+        timeLeft: state.timeLeft,
+        duration: state.duration,
+        isRunning: state.isRunning,
+        mode: state.mode,
+        selectedTaskId: state.selectedTaskId,
+        selectedGoalId: state.selectedGoalId,
+        priorityLevel: state.priorityLevel,
+        targetEndTime: state.targetEndTime,
+        sessionStartTime: state.sessionStartTime,
+      }),
     }
   )
 );
