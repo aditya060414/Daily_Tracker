@@ -8,6 +8,7 @@ import { useReviewsStore, useDateStore } from '../store';
 import { format, parseISO, subDays } from 'date-fns';
 import { DayReview } from '../types';
 import { LoadingSpinner } from '../components/LoadingSpinner';
+import { ReflectionTextArea } from '../components/review/ReflectionTextArea';
 
 const MOODS = [
   { value: 1, emoji: '😫', label: 'Awful' },
@@ -54,12 +55,7 @@ export const DailyReview: React.FC = () => {
     }
   }, [currentReview]);
 
-  // Count words in a string
-  const getWordCount = (text: string) => {
-    const trimmed = text.trim();
-    if (!trimmed) return 0;
-    return trimmed.split(/\s+/).filter((w) => w.length > 0).length;
-  };
+
 
   // Trigger auto-save on field blur
   const handleBlurSave = async (field: keyof Omit<DayReview, '_id' | 'date' | 'wordCount'>, value: any) => {
@@ -121,7 +117,7 @@ export const DailyReview: React.FC = () => {
   }
 
   return (
-    <div className="p-6 grid grid-cols-1 xl:grid-cols-12 gap-6 select-none animate-fade-in pb-6">
+    <div className="p-4 sm:p-6 grid grid-cols-1 xl:grid-cols-12 gap-6 select-none animate-fade-in pb-6">
       {/* REVIEW FORM: Highlights, Challenges, Gratitude, Tomorrow Focus (8 cols) */}
       <div className="xl:col-span-8 bg-panel border border-border rounded-lg p-5 space-y-6 flex flex-col">
         {/* Header */}
@@ -140,7 +136,7 @@ export const DailyReview: React.FC = () => {
               <button
                 key={m.value}
                 onClick={() => handleMoodSelect(m.value)}
-                className={`flex-1 min-w-[70px] py-3 rounded border text-center transition-all duration-150 flex flex-col items-center justify-center gap-1 ${
+                className={`flex-1 min-w-[54px] sm:min-w-[70px] py-3 rounded border text-center transition-all duration-150 flex flex-col items-center justify-center gap-1 ${
                   mood === m.value
                     ? 'bg-accent/15 border-accent text-off-white shadow-lg shadow-accent/10 scale-105'
                     : 'bg-card border-border text-off-white-muted hover:text-off-white hover:border-accent/30'
@@ -156,81 +152,37 @@ export const DailyReview: React.FC = () => {
 
         {/* Textareas */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 font-mono text-xs">
-          {/* Highlights */}
-          <div className="space-y-1.5 flex flex-col">
-            <div className="flex items-center justify-between">
-              <label className="text-[9px] uppercase tracking-wider text-off-white-muted">
-                1. Highlights of the Day
-              </label>
-              <span className="text-[8px] text-off-white-muted bg-card px-1.5 py-0.5 rounded border border-border">
-                {getWordCount(highlights)} words
-              </span>
-            </div>
-            <textarea
-              placeholder="What went well? Wins, breakthroughs..."
-              className="w-full flex-grow min-h-[120px] px-3 py-2 bg-darkbg border border-border rounded text-off-white outline-none focus:border-accent resize-none leading-relaxed"
-              value={highlights}
-              onChange={(e) => setHighlights(e.target.value)}
-              onBlur={() => handleBlurSave('highlights', highlights)}
-            />
-          </div>
+          <ReflectionTextArea
+            label="1. Highlights of the Day"
+            placeholder="What went well? Wins, breakthroughs..."
+            value={highlights}
+            onChange={setHighlights}
+            onBlur={() => handleBlurSave('highlights', highlights)}
+          />
 
-          {/* Challenges */}
-          <div className="space-y-1.5 flex flex-col">
-            <div className="flex items-center justify-between">
-              <label className="text-[9px] uppercase tracking-wider text-off-white-muted">
-                2. Challenges Faced
-              </label>
-              <span className="text-[8px] text-off-white-muted bg-card px-1.5 py-0.5 rounded border border-border">
-                {getWordCount(challenges)} words
-              </span>
-            </div>
-            <textarea
-              placeholder="What obstacles did you hit? Distractions..."
-              className="w-full flex-grow min-h-[120px] px-3 py-2 bg-darkbg border border-border rounded text-off-white outline-none focus:border-accent resize-none leading-relaxed"
-              value={challenges}
-              onChange={(e) => setChallenges(e.target.value)}
-              onBlur={() => handleBlurSave('challenges', challenges)}
-            />
-          </div>
+          <ReflectionTextArea
+            label="2. Challenges Faced"
+            placeholder="What obstacles did you hit? Distractions..."
+            value={challenges}
+            onChange={setChallenges}
+            onBlur={() => handleBlurSave('challenges', challenges)}
+          />
 
-          {/* Gratitude */}
-          <div className="space-y-1.5 flex flex-col">
-            <div className="flex items-center justify-between">
-              <label className="text-[9px] uppercase tracking-wider text-off-white-muted">
-                3. Gratitude (3 things)
-              </label>
-              <span className="text-[8px] text-off-white-muted bg-card px-1.5 py-0.5 rounded border border-border">
-                {getWordCount(gratitude)} words
-              </span>
-            </div>
-            <textarea
-              placeholder="1. Coffee&#10;2. TypeScript compilation success&#10;3. Morning run..."
-              className="w-full flex-grow min-h-[120px] px-3 py-2 bg-darkbg border border-border rounded text-off-white outline-none focus:border-accent resize-none leading-relaxed"
-              value={gratitude}
-              onChange={(e) => setGratitude(e.target.value)}
-              onBlur={() => handleBlurSave('gratitude', gratitude)}
-            />
-          </div>
+          <ReflectionTextArea
+            label="3. Gratitude (3 things)"
+            placeholder="1. Coffee&#10;2. TypeScript compilation success&#10;3. Morning run..."
+            value={gratitude}
+            onChange={setGratitude}
+            onBlur={() => handleBlurSave('gratitude', gratitude)}
+          />
 
-          {/* Tomorrow Focus */}
-          <div className="space-y-1.5 flex flex-col">
-            <div className="flex items-center justify-between">
-              <label className="text-[9px] uppercase tracking-wider text-off-white-muted">
-                4. Focus for Tomorrow
-              </label>
-              <span className="text-[8px] text-off-white-muted bg-card px-1.5 py-0.5 rounded border border-border">
-                {getWordCount(tomorrowFocus)} words
-              </span>
-            </div>
-            <textarea
-              placeholder="What are the absolute priorities for tomorrow?"
-              className="w-full flex-grow min-h-[120px] px-3 py-2 bg-darkbg border border-border rounded text-off-white outline-none focus:border-accent resize-none leading-relaxed"
-              value={tomorrowFocus}
-              onChange={(e) => setTomorrowFocus(e.target.value)}
-              onBlur={() => handleBlurSave('tomorrowFocus', tomorrowFocus)}
-            />
-          </div>
+          <ReflectionTextArea
+            label="4. Focus for Tomorrow"
+            placeholder="What are the absolute priorities for tomorrow?"
+            value={tomorrowFocus}
+            onChange={setTomorrowFocus}
+            onBlur={() => handleBlurSave('tomorrowFocus', tomorrowFocus)}
+          />
         </div>
 
         <div className="border-t border-border pt-3 text-[9px] font-mono text-off-white-muted text-right">
