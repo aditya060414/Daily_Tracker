@@ -91,14 +91,14 @@ export const Sidebar: React.FC = () => {
       </aside>
 
       {/* MOBILE BOTTOM TAB BAR: Hidden on desktop (>=768px) */}
-      <aside className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-panel border-t border-border flex items-center justify-around py-1.5 px-2">
+      <aside className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-panel border-t border-border flex items-center justify-start gap-1 overflow-x-auto no-scrollbar py-1.5 px-3">
         {navItems.map((item) => (
           <NavLink
             key={item.to}
             to={item.to}
             className={({ isActive }) =>
-              `flex flex-col items-center justify-center gap-0.5 px-2.5 py-1 rounded text-[8px] font-mono transition-all duration-150 ${
-                isActive ? 'text-accent font-bold' : 'text-off-white-muted hover:text-off-white'
+              `flex flex-col items-center justify-center shrink-0 min-w-[56px] gap-0.5 px-2 py-1 rounded text-[9px] font-mono transition-all duration-150 ${
+                isActive ? 'text-accent font-bold bg-accent/5' : 'text-off-white-muted hover:text-off-white'
               }`
             }
           >
