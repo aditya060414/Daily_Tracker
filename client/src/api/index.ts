@@ -63,24 +63,39 @@ export interface ApiResponse<T> {
 }
 
 export const authApi = {
-  login: async (email: string, password: string) => {
+  login: async (usernameOrEmail: string, password: string) => {
     const res = await api.post<ApiResponse<{ token: string; user: User }>>('/auth/login', {
-      email,
+      usernameOrEmail,
       password,
     });
     return res.data;
   },
-  register: async (name: string, email: string, password: string, confirmPassword: string) => {
+  register: async (email: string) => {
     const res = await api.post<ApiResponse<null>>('/auth/register', {
-      name,
       email,
+    });
+    return res.data;
+  },
+  registerComplete: async (
+    email: string,
+    signupToken: string,
+    name: string,
+    username: string,
+    password: string,
+    confirmPassword: string
+  ) => {
+    const res = await api.post<ApiResponse<{ token: string; user: User }>>('/auth/register-complete', {
+      email,
+      signupToken,
+      name,
+      username,
       password,
       confirmPassword,
     });
     return res.data;
   },
   verifyOtp: async (email: string, otp: string, purpose: 'signup' | 'forgot_password' | 'google_login') => {
-    const res = await api.post<ApiResponse<{ token?: string; user?: User; resetToken?: string }>>('/auth/verify-otp', {
+    const res = await api.post<ApiResponse<{ token?: string; user?: User; resetToken?: string; signupToken?: string; googleSignup?: boolean; name?: string; email?: string }>>('/auth/verify-otp', {
       email,
       otp,
       purpose,
@@ -97,9 +112,9 @@ export const authApi = {
     const res = await api.post<ApiResponse<null>>('/auth/logout');
     return res.data;
   },
-  forgotPassword: async (email: string) => {
-    const res = await api.post<ApiResponse<null>>('/auth/forgot-password', {
-      email,
+  forgotPassword: async (emailOrUsername: string) => {
+    const res = await api.post<ApiResponse<{ email: string }>>('/auth/forgot-password', {
+      emailOrUsername,
     });
     return res.data;
   },
