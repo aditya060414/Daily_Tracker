@@ -44,7 +44,7 @@ export const TopBar: React.FC<TopBarProps> = ({ onOpenCommandPalette }) => {
   };
 
   return (
-    <header className="sticky top-0 z-30 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 px-6 py-4 bg-panel/85 backdrop-blur border-b border-border text-off-white select-none">
+    <header className="sticky top-0 z-30 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 px-4 sm:px-6 py-3 sm:py-4 bg-panel/85 backdrop-blur border-b border-border text-off-white select-none">
       {/* Greetings */}
       <div className="flex flex-col">
         <h2 className="text-xs font-mono uppercase tracking-wider text-off-white-muted">Active Session</h2>
