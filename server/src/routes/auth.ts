@@ -50,19 +50,27 @@ router.post('/register', async (req, res, next) => {
       });
     }
 
-    const otp = Math.floor(100000 + Math.random() * 900000).toString(); // 6 digits
-    await setOTP(email, otp, 'signup');
-    
-    // Reset OTP attempts tracker in Redis
-    const attemptsKey = `otp:attempts:signup:${email.toLowerCase()}`;
-    await redisClient.del(attemptsKey);
+    // OTP FLOW BYPASSED: Commented out OTP generation and sending
+    // const otp = Math.floor(100000 + Math.random() * 900000).toString(); // 6 digits
+    // await setOTP(email, otp, 'signup');
+    // 
+    // // Reset OTP attempts tracker in Redis
+    // const attemptsKey = `otp:attempts:signup:${email.toLowerCase()}`;
+    // await redisClient.del(attemptsKey);
+    // 
+    // // Send OTP
+    // await sendSignupOTP(email, 'User', otp);
 
-    // Send OTP
-    await sendSignupOTP(email, 'User', otp);
+    const signupToken = crypto.randomBytes(32).toString('hex');
+    const signupTokenKey = `signup_token:${email.toLowerCase()}`;
+    await redisClient.set(signupTokenKey, signupToken, { EX: 600 }); // valid for 10 mins
 
     return res.status(200).json({
       success: true,
-      message: 'Verification OTP sent to your email.',
+      message: 'Direct profile creation unlocked (OTP bypassed).',
+      data: {
+        signupToken,
+      }
     });
   } catch (error) {
     next(error);
@@ -528,24 +536,86 @@ router.post('/google-login', async (req, res, next) => {
     const name = payload.name || email.split('@')[0];
     const avatar = payload.picture;
 
-    // Store pending details in Redis and trigger OTP verification
-    await setPendingUser(email, { name, email, googleId, avatar });
+    // Check if user exists by googleId or by email
+    let user = await User.findOne({ $or: [{ googleId }, { email }] });
 
-    const otp = Math.floor(100000 + Math.random() * 900000).toString(); // 6 digits
-    await setOTP(email, otp, 'google_login');
+    if (user) {
+      user.googleId = googleId;
+      user.avatar = avatar || user.avatar;
+      user.loginMethod = 'google';
+      user.lastLogin = new Date();
+      // Ensure user has a username
+      if (!user.username) {
+        let usernameBase = user.name.toLowerCase().replace(/[^a-z0-9]/g, '');
+        if (!usernameBase) usernameBase = email.split('@')[0].toLowerCase().replace(/[^a-z0-9]/g, '');
+        let username = usernameBase;
+        let suffix = 1;
+        while (await User.findOne({ username })) {
+          username = `${usernameBase}${suffix}`;
+          suffix++;
+        }
+        user.username = username;
+      }
+      await user.save();
 
-    // Reset OTP attempts tracker in Redis
-    const attemptsKey = `otp:attempts:google_login:${email.toLowerCase()}`;
-    await redisClient.del(attemptsKey);
+      // Generate JWT
+      const token = jwt.sign(
+        { userId: user._id, email: user.email, name: user.name },
+        JWT_SECRET,
+        { expiresIn: '30d' }
+      );
 
-    // Send Google login verification OTP
-    await sendSignupOTP(email, name, otp);
+      // Save session in Redis
+      await setSession(user._id.toString(), token);
 
-    return res.status(200).json({
-      success: true,
-      pendingOtp: true,
-      email,
-    });
+      // Set cookie (7 days)
+      res.cookie('token', token, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax',
+        maxAge: 7 * 24 * 60 * 60 * 1000,
+      });
+
+      return res.status(200).json({
+        success: true,
+        pendingOtp: false,
+        data: {
+          token,
+          user: {
+            id: user._id,
+            name: user.name,
+            username: user.username,
+            email: user.email,
+            avatar: user.avatar,
+            loginMethod: user.loginMethod,
+          },
+        },
+      });
+    } else {
+      // User does not exist. Directly generate signupToken and return googleSignup redirection!
+      const signupToken = crypto.randomBytes(32).toString('hex');
+      const signupTokenKey = `signup_token:${email}`;
+      await redisClient.set(signupTokenKey, signupToken, { EX: 600 }); // valid for 10 mins
+
+      // Keep Google details in Redis to link upon completion
+      const googlePendingKey = `google_pending:${email}`;
+      await redisClient.set(googlePendingKey, JSON.stringify({
+        googleId,
+        avatar,
+        name
+      }), { EX: 600 });
+
+      return res.status(200).json({
+        success: true,
+        pendingOtp: false,
+        data: {
+          googleSignup: true,
+          signupToken,
+          email,
+          name,
+        },
+      });
+    }
   } catch (error) {
     next(error);
   }
@@ -586,20 +656,27 @@ router.post('/forgot-password', async (req, res, next) => {
       });
     }
 
-    const email = user.email;
-    const otp = Math.floor(100000 + Math.random() * 900000).toString(); // 6 digits
-    await setOTP(email, otp, 'forgot_password');
+    // OTP FLOW BYPASSED: Commented out OTP generation and sending
+    // const otp = Math.floor(100000 + Math.random() * 900000).toString(); // 6 digits
+    // await setOTP(email, otp, 'forgot_password');
+    // 
+    // // Reset OTP attempts tracker in Redis
+    // const attemptsKey = `otp:attempts:forgot_password:${email.toLowerCase()}`;
+    // await redisClient.del(attemptsKey);
+    // 
+    // await sendPasswordResetOTP(email, user.name, otp);
 
-    // Reset OTP attempts tracker in Redis
-    const attemptsKey = `otp:attempts:forgot_password:${email.toLowerCase()}`;
-    await redisClient.del(attemptsKey);
-
-    await sendPasswordResetOTP(email, user.name, otp);
+    const resetToken = crypto.randomBytes(32).toString('hex');
+    const resetTokenKey = `reset_token:${user.email.toLowerCase()}`;
+    await redisClient.set(resetTokenKey, resetToken, { EX: 300 }); // valid for 5 mins
 
     return res.status(200).json({
       success: true,
-      email: email,
-      message: 'Password reset OTP sent to your email.',
+      email: user.email,
+      message: 'Password recovery unlocked (OTP bypassed).',
+      data: {
+        resetToken,
+      }
     });
   } catch (error) {
     next(error);
