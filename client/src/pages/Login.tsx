@@ -3,19 +3,25 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useNavigate } from 'react-router-dom';
-import { Terminal, ShieldAlert, KeyRound, User as UserIcon, Mail, Lock, ShieldCheck, ArrowRight, Chrome } from 'lucide-react';
+import { Terminal, ShieldAlert, KeyRound, User as UserIcon, Mail, Lock, ShieldCheck, ArrowRight, Chrome, Eye, EyeOff } from 'lucide-react';
 import { authApi } from '../api';
 import { useAuthStore } from '../store';
 
 // Schemas for form validation
 const loginSchema = z.object({
-  email: z.string().email('Please enter a valid email address'),
+  usernameOrEmail: z.string().min(3, 'Username or email must be at least 3 characters'),
   password: z.string().min(6, 'Password must be at least 6 characters'),
 });
 
-const registerSchema = z.object({
-  name: z.string().min(2, 'Name must be at least 2 characters'),
+const registerEmailSchema = z.object({
   email: z.string().email('Please enter a valid email address'),
+});
+
+const registerProfileSchema = z.object({
+  name: z.string().min(2, 'Name must be at least 2 characters'),
+  username: z.string()
+    .min(3, 'Username must be at least 3 characters')
+    .regex(/^[a-zA-Z0-9_]+$/, 'Username can only contain letters, numbers, and underscores'),
   password: z.string().min(6, 'Password must be at least 6 characters'),
   confirmPassword: z.string().min(6, 'Confirm password must be at least 6 characters'),
 }).refine((data) => data.password === data.confirmPassword, {
@@ -24,7 +30,7 @@ const registerSchema = z.object({
 });
 
 const forgotSchema = z.object({
-  email: z.string().email('Please enter a valid email address'),
+  emailOrUsername: z.string().min(3, 'Email or username must be at least 3 characters'),
 });
 
 const resetSchema = z.object({
@@ -36,7 +42,8 @@ const resetSchema = z.object({
 });
 
 type LoginValues = z.infer<typeof loginSchema>;
-type RegisterValues = z.infer<typeof registerSchema>;
+type RegisterEmailValues = z.infer<typeof registerEmailSchema>;
+type RegisterProfileValues = z.infer<typeof registerProfileSchema>;
 type ForgotValues = z.infer<typeof forgotSchema>;
 type ResetValues = z.infer<typeof resetSchema>;
 
@@ -59,7 +66,15 @@ export const Login: React.FC = () => {
   const [otpAttemptsLeft, setOtpAttemptsLeft] = useState(3);
   const [otpError, setOtpError] = useState<string | null>(null);
   const [tempResetToken, setTempResetToken] = useState('');
+  const [tempSignupToken, setTempSignupToken] = useState('');
   const [googleCredential, setGoogleCredential] = useState<string>('');
+
+  // Peek password states
+  const [showLoginPassword, setShowLoginPassword] = useState(false);
+  const [showRegisterPassword, setShowRegisterPassword] = useState(false);
+  const [showRegisterConfirmPassword, setShowRegisterConfirmPassword] = useState(false);
+  const [showResetPassword, setShowResetPassword] = useState(false);
+  const [showResetConfirmPassword, setShowResetConfirmPassword] = useState(false);
 
   // Simulated Google account chooser state
   const [showGoogleChooser, setShowGoogleChooser] = useState(false);
@@ -187,7 +202,8 @@ export const Login: React.FC = () => {
 
   // 2. React Hook Forms setup
   const loginForm = useForm<LoginValues>({ resolver: zodResolver(loginSchema) });
-  const registerForm = useForm<RegisterValues>({ resolver: zodResolver(registerSchema) });
+  const registerEmailForm = useForm<RegisterEmailValues>({ resolver: zodResolver(registerEmailSchema) });
+  const registerProfileForm = useForm<RegisterProfileValues>({ resolver: zodResolver(registerProfileSchema) });
   const forgotForm = useForm<ForgotValues>({ resolver: zodResolver(forgotSchema) });
   const resetForm = useForm<ResetValues>({ resolver: zodResolver(resetSchema) });
 
@@ -196,7 +212,7 @@ export const Login: React.FC = () => {
     setLoading(true);
     setServerError(null);
     try {
-      const res = await authApi.login(values.email, values.password);
+      const res = await authApi.login(values.usernameOrEmail, values.password);
       if (res.success && res.data) {
         setAuth(res.data.token, res.data.user);
         navigate('/');
@@ -210,11 +226,11 @@ export const Login: React.FC = () => {
     }
   };
 
-  const onRegisterSubmit = async (values: RegisterValues) => {
+  const onRegisterEmailSubmit = async (values: RegisterEmailValues) => {
     setLoading(true);
     setServerError(null);
     try {
-      const res = await authApi.register(values.name, values.email, values.password, values.confirmPassword);
+      const res = await authApi.register(values.email);
       if (res.success) {
         setOtpEmail(values.email);
         setOtpPurpose('signup');
@@ -232,14 +248,43 @@ export const Login: React.FC = () => {
     }
   };
 
+  const onRegisterProfileSubmit = async (values: RegisterProfileValues) => {
+    if (!tempSignupToken) {
+      setServerError('Signup verification token missing. Please verify OTP again.');
+      return;
+    }
+    setLoading(true);
+    setServerError(null);
+    try {
+      const res = await authApi.registerComplete(
+        otpEmail,
+        tempSignupToken,
+        values.name,
+        values.username,
+        values.password,
+        values.confirmPassword
+      );
+      if (res.success && res.data) {
+        setAuth(res.data.token, res.data.user);
+        navigate('/');
+      } else {
+        setServerError(res.error || 'Failed to finalize profile registration');
+      }
+    } catch (err: any) {
+      setServerError(err.response?.data?.error || 'Registration completion failed. Username might already be taken.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const onForgotSubmit = async (values: ForgotValues) => {
     setLoading(true);
     setServerError(null);
     setServerSuccess(null);
     try {
-      const res = await authApi.forgotPassword(values.email);
-      if (res.success) {
-        setOtpEmail(values.email);
+      const res = await authApi.forgotPassword(values.emailOrUsername);
+      if (res.success && res.data) {
+        setOtpEmail(res.data.email);
         setOtpPurpose('forgot_password');
         setOtpDigits(['', '', '', '', '', '']);
         setOtpAttemptsLeft(3);
@@ -312,9 +357,17 @@ export const Login: React.FC = () => {
       const res = await authApi.verifyOtp(otpEmail, otp, otpPurpose);
       if (res.success && res.data) {
         setShowOtpModal(false);
-        if (otpPurpose === 'signup' || otpPurpose === 'google_login') {
-          // Logged in immediately on signup/google OTP verification
-          if (res.data.token && res.data.user) {
+        if (otpPurpose === 'signup') {
+          // Store the signup token so they can choose username, name, and password
+          setTempSignupToken(res.data.signupToken || '');
+        } else if (otpPurpose === 'google_login') {
+          if (res.data.googleSignup) {
+            // Google account is not present in data. Redirect to profile registration gateway.
+            setOtpEmail(res.data.email || '');
+            setTempSignupToken(res.data.signupToken || '');
+            registerProfileForm.setValue('name', res.data.name || '');
+            setMode('register');
+          } else if (res.data.token && res.data.user) {
             setAuth(res.data.token, res.data.user);
             navigate('/');
           }
@@ -346,13 +399,7 @@ export const Login: React.FC = () => {
     try {
       let res;
       if (otpPurpose === 'signup') {
-        const pending = await authApi.register(
-          registerForm.getValues('name'),
-          otpEmail,
-          registerForm.getValues('password'),
-          registerForm.getValues('confirmPassword')
-        );
-        res = pending;
+        res = await authApi.register(otpEmail);
       } else if (otpPurpose === 'google_login') {
         if (!googleCredential) {
           setOtpError('Google authentication session expired. Please click Continue with Google again.');
@@ -503,18 +550,18 @@ export const Login: React.FC = () => {
               <form onSubmit={loginForm.handleSubmit(onLoginSubmit)} className="space-y-4">
                 <div className="space-y-1.5">
                   <label className="text-[10px] uppercase tracking-wider text-off-white-muted flex items-center gap-1.5">
-                    <Mail className="w-3 h-3 text-accent" /> Email Address
+                    <UserIcon className="w-3 h-3 text-accent" /> Username or Email Address
                   </label>
                   <input
-                    type="email"
-                    placeholder="e.g. aditya@dailyos.host"
+                    type="text"
+                    placeholder="e.g. aditya or aditya@dailyos.host"
                     className={`w-full px-3 py-2 text-xs bg-darkbg border rounded text-off-white placeholder-off-white-muted focus:border-accent outline-none transition-all ${
-                      loginForm.formState.errors.email ? 'border-red-500/50' : 'border-border'
+                      loginForm.formState.errors.usernameOrEmail ? 'border-red-500/50' : 'border-border'
                     }`}
-                    {...loginForm.register('email')}
+                    {...loginForm.register('usernameOrEmail')}
                   />
-                  {loginForm.formState.errors.email && (
-                    <p className="text-[10px] text-red-400 mt-0.5">{loginForm.formState.errors.email.message}</p>
+                  {loginForm.formState.errors.usernameOrEmail && (
+                    <p className="text-[10px] text-red-400 mt-0.5">{loginForm.formState.errors.usernameOrEmail.message}</p>
                   )}
                 </div>
 
@@ -531,14 +578,23 @@ export const Login: React.FC = () => {
                       Forgot?
                     </button>
                   </div>
-                  <input
-                    type="password"
-                    placeholder="••••••••"
-                    className={`w-full px-3 py-2 text-xs bg-darkbg border rounded text-off-white placeholder-off-white-muted focus:border-accent outline-none transition-all ${
-                      loginForm.formState.errors.password ? 'border-red-500/50' : 'border-border'
-                    }`}
-                    {...loginForm.register('password')}
-                  />
+                  <div className="relative">
+                    <input
+                      type={showLoginPassword ? 'text' : 'password'}
+                      placeholder="••••••••"
+                      className={`w-full pl-3 pr-10 py-2 text-xs bg-darkbg border rounded text-off-white placeholder-off-white-muted focus:border-accent outline-none transition-all ${
+                        loginForm.formState.errors.password ? 'border-red-500/50' : 'border-border'
+                      }`}
+                      {...loginForm.register('password')}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowLoginPassword(!showLoginPassword)}
+                      className="absolute inset-y-0 right-0 pr-3 flex items-center text-off-white-muted hover:text-accent focus:outline-none transition-colors"
+                    >
+                      {showLoginPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
                   {loginForm.formState.errors.password && (
                     <p className="text-[10px] text-red-400 mt-0.5">{loginForm.formState.errors.password.message}</p>
                   )}
@@ -567,25 +623,8 @@ export const Login: React.FC = () => {
             {/* ========================================================
                 REGISTER FORM
                 ======================================================== */}
-            {mode === 'register' && (
-              <form onSubmit={registerForm.handleSubmit(onRegisterSubmit)} className="space-y-4">
-                <div className="space-y-1.5">
-                  <label className="text-[10px] uppercase tracking-wider text-off-white-muted flex items-center gap-1.5">
-                    <UserIcon className="w-3 h-3 text-accent" /> Full Name
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="e.g. Aditya Kumar"
-                    className={`w-full px-3 py-2 text-xs bg-darkbg border rounded text-off-white placeholder-off-white-muted focus:border-accent outline-none transition-all ${
-                      registerForm.formState.errors.name ? 'border-red-500/50' : 'border-border'
-                    }`}
-                    {...registerForm.register('name')}
-                  />
-                  {registerForm.formState.errors.name && (
-                    <p className="text-[10px] text-red-400 mt-0.5">{registerForm.formState.errors.name.message}</p>
-                  )}
-                </div>
-
+            {mode === 'register' && !tempSignupToken && (
+              <form onSubmit={registerEmailForm.handleSubmit(onRegisterEmailSubmit)} className="space-y-4">
                 <div className="space-y-1.5">
                   <label className="text-[10px] uppercase tracking-wider text-off-white-muted flex items-center gap-1.5">
                     <Mail className="w-3 h-3 text-accent" /> Email Address
@@ -594,12 +633,73 @@ export const Login: React.FC = () => {
                     type="email"
                     placeholder="e.g. aditya@dailyos.host"
                     className={`w-full px-3 py-2 text-xs bg-darkbg border rounded text-off-white placeholder-off-white-muted focus:border-accent outline-none transition-all ${
-                      registerForm.formState.errors.email ? 'border-red-500/50' : 'border-border'
+                      registerEmailForm.formState.errors.email ? 'border-red-500/50' : 'border-border'
                     }`}
-                    {...registerForm.register('email')}
+                    {...registerEmailForm.register('email')}
                   />
-                  {registerForm.formState.errors.email && (
-                    <p className="text-[10px] text-red-400 mt-0.5">{registerForm.formState.errors.email.message}</p>
+                  {registerEmailForm.formState.errors.email && (
+                    <p className="text-[10px] text-red-400 mt-0.5">{registerEmailForm.formState.errors.email.message}</p>
+                  )}
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="w-full py-2.5 rounded bg-accent hover:bg-accent-dim text-darkbg hover:text-off-white font-bold text-xs uppercase tracking-wider transition-all duration-150 flex justify-center items-center gap-1.5"
+                >
+                  {loading ? (
+                    <>
+                      <span className="w-3 h-3 border-2 border-darkbg border-t-transparent rounded-full animate-spin"></span>
+                      <span>SENDING_OTP...</span>
+                    </>
+                  ) : (
+                    <>
+                      <span>SEND_VERIFICATION_OTP</span>
+                      <ArrowRight className="w-3.5 h-3.5" />
+                    </>
+                  )}
+                </button>
+              </form>
+            )}
+
+            {mode === 'register' && tempSignupToken && (
+              <form onSubmit={registerProfileForm.handleSubmit(onRegisterProfileSubmit)} className="space-y-4">
+                <div className="flex items-center gap-2 p-2.5 rounded bg-green-500/10 border border-green-500/20 text-green-400 text-[10px] mb-2 animate-fade-in">
+                  <ShieldCheck className="w-4 h-4 shrink-0" />
+                  <span>Email verified: <strong>{otpEmail}</strong></span>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-[10px] uppercase tracking-wider text-off-white-muted flex items-center gap-1.5">
+                    <UserIcon className="w-3 h-3 text-accent" /> Full Name
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Aditya Kumar"
+                    className={`w-full px-3 py-2 text-xs bg-darkbg border rounded text-off-white placeholder-off-white-muted focus:border-accent outline-none transition-all ${
+                      registerProfileForm.formState.errors.name ? 'border-red-500/50' : 'border-border'
+                    }`}
+                    {...registerProfileForm.register('name')}
+                  />
+                  {registerProfileForm.formState.errors.name && (
+                    <p className="text-[10px] text-red-400 mt-0.5">{registerProfileForm.formState.errors.name.message}</p>
+                  )}
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-[10px] uppercase tracking-wider text-off-white-muted flex items-center gap-1.5">
+                    <UserIcon className="w-3 h-3 text-accent" /> Choose Username
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. adityakumar"
+                    className={`w-full px-3 py-2 text-xs bg-darkbg border rounded text-off-white placeholder-off-white-muted focus:border-accent outline-none transition-all ${
+                      registerProfileForm.formState.errors.username ? 'border-red-500/50' : 'border-border'
+                    }`}
+                    {...registerProfileForm.register('username')}
+                  />
+                  {registerProfileForm.formState.errors.username && (
+                    <p className="text-[10px] text-red-400 mt-0.5">{registerProfileForm.formState.errors.username.message}</p>
                   )}
                 </div>
 
@@ -607,16 +707,25 @@ export const Login: React.FC = () => {
                   <label className="text-[10px] uppercase tracking-wider text-off-white-muted flex items-center gap-1.5">
                     <Lock className="w-3 h-3 text-accent" /> Password
                   </label>
-                  <input
-                    type="password"
-                    placeholder="••••••••"
-                    className={`w-full px-3 py-2 text-xs bg-darkbg border rounded text-off-white placeholder-off-white-muted focus:border-accent outline-none transition-all ${
-                      registerForm.formState.errors.password ? 'border-red-500/50' : 'border-border'
-                    }`}
-                    {...registerForm.register('password')}
-                  />
-                  {registerForm.formState.errors.password && (
-                    <p className="text-[10px] text-red-400 mt-0.5">{registerForm.formState.errors.password.message}</p>
+                  <div className="relative">
+                    <input
+                      type={showRegisterPassword ? 'text' : 'password'}
+                      placeholder="••••••••"
+                      className={`w-full pl-3 pr-10 py-2 text-xs bg-darkbg border rounded text-off-white placeholder-off-white-muted focus:border-accent outline-none transition-all ${
+                        registerProfileForm.formState.errors.password ? 'border-red-500/50' : 'border-border'
+                      }`}
+                      {...registerProfileForm.register('password')}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowRegisterPassword(!showRegisterPassword)}
+                      className="absolute inset-y-0 right-0 pr-3 flex items-center text-off-white-muted hover:text-accent focus:outline-none transition-colors"
+                    >
+                      {showRegisterPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                  {registerProfileForm.formState.errors.password && (
+                    <p className="text-[10px] text-red-400 mt-0.5">{registerProfileForm.formState.errors.password.message}</p>
                   )}
                 </div>
 
@@ -624,16 +733,25 @@ export const Login: React.FC = () => {
                   <label className="text-[10px] uppercase tracking-wider text-off-white-muted flex items-center gap-1.5">
                     <Lock className="w-3 h-3 text-accent" /> Confirm Password
                   </label>
-                  <input
-                    type="password"
-                    placeholder="••••••••"
-                    className={`w-full px-3 py-2 text-xs bg-darkbg border rounded text-off-white placeholder-off-white-muted focus:border-accent outline-none transition-all ${
-                      registerForm.formState.errors.confirmPassword ? 'border-red-500/50' : 'border-border'
-                    }`}
-                    {...registerForm.register('confirmPassword')}
-                  />
-                  {registerForm.formState.errors.confirmPassword && (
-                    <p className="text-[10px] text-red-400 mt-0.5">{registerForm.formState.errors.confirmPassword.message}</p>
+                  <div className="relative">
+                    <input
+                      type={showRegisterConfirmPassword ? 'text' : 'password'}
+                      placeholder="••••••••"
+                      className={`w-full pl-3 pr-10 py-2 text-xs bg-darkbg border rounded text-off-white placeholder-off-white-muted focus:border-accent outline-none transition-all ${
+                        registerProfileForm.formState.errors.confirmPassword ? 'border-red-500/50' : 'border-border'
+                      }`}
+                      {...registerProfileForm.register('confirmPassword')}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowRegisterConfirmPassword(!showRegisterConfirmPassword)}
+                      className="absolute inset-y-0 right-0 pr-3 flex items-center text-off-white-muted hover:text-accent focus:outline-none transition-colors"
+                    >
+                      {showRegisterConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                  {registerProfileForm.formState.errors.confirmPassword && (
+                    <p className="text-[10px] text-red-400 mt-0.5">{registerProfileForm.formState.errors.confirmPassword.message}</p>
                   )}
                 </div>
 
@@ -654,6 +772,17 @@ export const Login: React.FC = () => {
                     </>
                   )}
                 </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setTempSignupToken('');
+                    setOtpEmail('');
+                  }}
+                  className="w-full text-center text-[9px] uppercase tracking-wider text-off-white-muted hover:underline mt-2"
+                >
+                  Use different email
+                </button>
               </form>
             )}
 
@@ -664,18 +793,18 @@ export const Login: React.FC = () => {
               <form onSubmit={forgotForm.handleSubmit(onForgotSubmit)} className="space-y-4">
                 <div className="space-y-1.5">
                   <label className="text-[10px] uppercase tracking-wider text-off-white-muted flex items-center gap-1.5">
-                    <Mail className="w-3 h-3 text-accent" /> Email Address
+                    <UserIcon className="w-3 h-3 text-accent" /> Username or Email Address
                   </label>
                   <input
-                    type="email"
-                    placeholder="e.g. aditya@dailyos.host"
+                    type="text"
+                    placeholder="e.g. aditya or aditya@dailyos.host"
                     className={`w-full px-3 py-2 text-xs bg-darkbg border rounded text-off-white placeholder-off-white-muted focus:border-accent outline-none transition-all ${
-                      forgotForm.formState.errors.email ? 'border-red-500/50' : 'border-border'
+                      forgotForm.formState.errors.emailOrUsername ? 'border-red-500/50' : 'border-border'
                     }`}
-                    {...forgotForm.register('email')}
+                    {...forgotForm.register('emailOrUsername')}
                   />
-                  {forgotForm.formState.errors.email && (
-                    <p className="text-[10px] text-red-400 mt-0.5">{forgotForm.formState.errors.email.message}</p>
+                  {forgotForm.formState.errors.emailOrUsername && (
+                    <p className="text-[10px] text-red-400 mt-0.5">{forgotForm.formState.errors.emailOrUsername.message}</p>
                   )}
                 </div>
 
@@ -708,14 +837,23 @@ export const Login: React.FC = () => {
                   <label className="text-[10px] uppercase tracking-wider text-off-white-muted flex items-center gap-1.5">
                     <Lock className="w-3 h-3 text-accent" /> New Password
                   </label>
-                  <input
-                    type="password"
-                    placeholder="••••••••"
-                    className={`w-full px-3 py-2 text-xs bg-darkbg border rounded text-off-white placeholder-off-white-muted focus:border-accent outline-none transition-all ${
-                      resetForm.formState.errors.password ? 'border-red-500/50' : 'border-border'
-                    }`}
-                    {...resetForm.register('password')}
-                  />
+                  <div className="relative">
+                    <input
+                      type={showResetPassword ? 'text' : 'password'}
+                      placeholder="••••••••"
+                      className={`w-full pl-3 pr-10 py-2 text-xs bg-darkbg border rounded text-off-white placeholder-off-white-muted focus:border-accent outline-none transition-all ${
+                        resetForm.formState.errors.password ? 'border-red-500/50' : 'border-border'
+                      }`}
+                      {...resetForm.register('password')}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowResetPassword(!showResetPassword)}
+                      className="absolute inset-y-0 right-0 pr-3 flex items-center text-off-white-muted hover:text-accent focus:outline-none transition-colors"
+                    >
+                      {showResetPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
                   {resetForm.formState.errors.password && (
                     <p className="text-[10px] text-red-400 mt-0.5">{resetForm.formState.errors.password.message}</p>
                   )}
@@ -725,14 +863,23 @@ export const Login: React.FC = () => {
                   <label className="text-[10px] uppercase tracking-wider text-off-white-muted flex items-center gap-1.5">
                     <Lock className="w-3 h-3 text-accent" /> Confirm New Password
                   </label>
-                  <input
-                    type="password"
-                    placeholder="••••••••"
-                    className={`w-full px-3 py-2 text-xs bg-darkbg border rounded text-off-white placeholder-off-white-muted focus:border-accent outline-none transition-all ${
-                      resetForm.formState.errors.confirmPassword ? 'border-red-500/50' : 'border-border'
-                    }`}
-                    {...resetForm.register('confirmPassword')}
-                  />
+                  <div className="relative">
+                    <input
+                      type={showResetConfirmPassword ? 'text' : 'password'}
+                      placeholder="••••••••"
+                      className={`w-full pl-3 pr-10 py-2 text-xs bg-darkbg border rounded text-off-white placeholder-off-white-muted focus:border-accent outline-none transition-all ${
+                        resetForm.formState.errors.confirmPassword ? 'border-red-500/50' : 'border-border'
+                      }`}
+                      {...resetForm.register('confirmPassword')}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowResetConfirmPassword(!showResetConfirmPassword)}
+                      className="absolute inset-y-0 right-0 pr-3 flex items-center text-off-white-muted hover:text-accent focus:outline-none transition-colors"
+                    >
+                      {showResetConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
                   {resetForm.formState.errors.confirmPassword && (
                     <p className="text-[10px] text-red-400 mt-0.5">{resetForm.formState.errors.confirmPassword.message}</p>
                   )}
@@ -761,7 +908,7 @@ export const Login: React.FC = () => {
             {/* ========================================================
                 SOCIAL LOGIN BLOCK
                 ======================================================== */}
-            {(mode === 'login' || mode === 'register') && (
+            {(mode === 'login' || (mode === 'register' && !tempSignupToken)) && (
               <div className="mt-6 space-y-4">
                 <div className="relative">
                   <div className="absolute inset-0 flex items-center">
@@ -815,6 +962,7 @@ export const Login: React.FC = () => {
                     setMode('login');
                     setServerError(null);
                     setServerSuccess(null);
+                    setTempSignupToken('');
                   }}
                   className="text-[10px] text-accent hover:underline uppercase tracking-wider"
                 >
