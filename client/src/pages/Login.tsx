@@ -339,9 +339,42 @@ export const Login: React.FC = () => {
   };
 
   const handleOtpKeyDown = (index: number, e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Backspace' && !otpDigits[index] && index > 0) {
-      otpInputRefs.current[index - 1]?.focus();
+    if (e.key === 'Backspace') {
+      e.preventDefault();
+      const newDigits = [...otpDigits];
+      if (otpDigits[index]) {
+        // Clear current box and focus previous box
+        newDigits[index] = '';
+        setOtpDigits(newDigits);
+        if (index > 0) {
+          otpInputRefs.current[index - 1]?.focus();
+        }
+      } else if (index > 0) {
+        // Clear previous box and focus it
+        newDigits[index - 1] = '';
+        setOtpDigits(newDigits);
+        otpInputRefs.current[index - 1]?.focus();
+      }
     }
+  };
+
+  const handleOtpPaste = (e: React.ClipboardEvent<HTMLInputElement>) => {
+    e.preventDefault();
+    const pastedData = e.clipboardData.getData('text');
+    const digitsOnly = pastedData.replace(/\D/g, '').slice(0, 6);
+    if (!digitsOnly) return;
+
+    const newDigits = [...otpDigits];
+    for (let i = 0; i < 6; i++) {
+      if (i < digitsOnly.length) {
+        newDigits[i] = digitsOnly[i];
+      }
+    }
+    setOtpDigits(newDigits);
+
+    // Focus the last filled box
+    const focusIndex = Math.min(5, digitsOnly.length - 1);
+    otpInputRefs.current[focusIndex]?.focus();
   };
 
   const handleOtpSubmit = async () => {
@@ -1015,10 +1048,11 @@ export const Login: React.FC = () => {
                   key={idx}
                   ref={(el) => (otpInputRefs.current[idx] = el)}
                   type="text"
-                  maxLength={1}
+                  maxLength={6}
                   value={digit}
                   onChange={(e) => handleOtpChange(idx, e.target.value)}
                   onKeyDown={(e) => handleOtpKeyDown(idx, e)}
+                  onPaste={handleOtpPaste}
                   className="w-10 h-12 text-center text-lg font-bold bg-darkbg border border-border rounded text-accent focus:border-accent outline-none transition-all"
                 />
               ))}
