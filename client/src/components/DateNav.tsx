@@ -34,7 +34,7 @@ export const DateNav: React.FC = () => {
         <span className="hidden sm:inline">TODAY</span>
       </button>
 
-      <span className="text-xs font-mono font-bold px-3 select-none text-off-white min-w-[160px] text-center">
+      <span className="text-xs font-mono font-bold px-1 sm:px-3 select-none text-off-white min-w-[120px] sm:min-w-[160px] text-center">
         {getDisplayDate()}
       </span>
 
