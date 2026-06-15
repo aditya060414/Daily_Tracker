@@ -27,32 +27,16 @@ const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
 
 const googleClient = new OAuth2Client(GOOGLE_CLIENT_ID);
 
-// POST /api/v1/auth/register (Email Signup Step 1)
+// POST /api/v1/auth/register (Email Signup Step 1 - Send OTP)
 router.post('/register', async (req, res, next) => {
   try {
-    const { name, email, password, confirmPassword } = req.body;
+    const { email } = req.body;
 
-    if (!name || !email || !password || !confirmPassword) {
+    if (!email) {
       return res.status(400).json({
         success: false,
         data: null,
-        error: 'All fields are required.',
-      });
-    }
-
-    if (password !== confirmPassword) {
-      return res.status(400).json({
-        success: false,
-        data: null,
-        error: 'Passwords do not match.',
-      });
-    }
-
-    if (password.length < 6) {
-      return res.status(400).json({
-        success: false,
-        data: null,
-        error: 'Password must be at least 6 characters long.',
+        error: 'Email is required.',
       });
     }
 
@@ -66,11 +50,6 @@ router.post('/register', async (req, res, next) => {
       });
     }
 
-    const passwordHash = await bcrypt.hash(password, 10);
-
-    // Save pending details and generate OTP
-    await setPendingUser(email, { name, email: email.toLowerCase(), passwordHash });
-    
     const otp = Math.floor(100000 + Math.random() * 900000).toString(); // 6 digits
     await setOTP(email, otp, 'signup');
     
@@ -79,7 +58,7 @@ router.post('/register', async (req, res, next) => {
     await redisClient.del(attemptsKey);
 
     // Send OTP
-    await sendSignupOTP(email, name, otp);
+    await sendSignupOTP(email, 'User', otp);
 
     return res.status(200).json({
       success: true,
@@ -141,68 +120,15 @@ router.post('/verify-otp', async (req, res, next) => {
     await redisClient.del(attemptsKey);
 
     if (purpose === 'signup') {
-      const pendingUser = await getPendingUser(lowerEmail);
-      if (!pendingUser) {
-        return res.status(400).json({
-          success: false,
-          data: null,
-          error: 'Registration session expired. Please sign up again.',
-        });
-      }
+      // Generate a temporary signup token in Redis
+      const signupToken = crypto.randomBytes(32).toString('hex');
+      const signupTokenKey = `signup_token:${lowerEmail}`;
+      await redisClient.set(signupTokenKey, signupToken, { EX: 600 }); // valid for 10 mins
 
-      // Check if user document already exists (e.g. unverified user registered again)
-      let user = await User.findOne({ email: lowerEmail });
-      if (user) {
-        user.name = pendingUser.name;
-        user.password = pendingUser.passwordHash;
-        user.isVerified = true;
-        user.loginMethod = 'email';
-        user.lastLogin = new Date();
-        await user.save();
-      } else {
-        user = await User.create({
-          name: pendingUser.name,
-          email: lowerEmail,
-          password: pendingUser.passwordHash,
-          isVerified: true,
-          loginMethod: 'email',
-          lastLogin: new Date(),
-        });
-      }
-
-      await deletePendingUser(lowerEmail);
-
-      // Generate JWT
-      const token = jwt.sign(
-        { userId: user._id, email: user.email, name: user.name },
-        JWT_SECRET,
-        { expiresIn: '30d' }
-      );
-
-      // Save session in Redis
-      await setSession(user._id.toString(), token);
-
-      // Set cookie (7 days)
-      res.cookie('token', token, {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'lax',
-        maxAge: 7 * 24 * 60 * 60 * 1000,
-      });
-
-      // Send welcome email
-      await sendWelcomeEmail(user.email, user.name);
-
-      return res.status(201).json({
+      return res.status(200).json({
         success: true,
         data: {
-          token,
-          user: {
-            id: user._id,
-            name: user.name,
-            email: user.email,
-            loginMethod: user.loginMethod,
-          },
+          signupToken,
         },
       });
     } else if (purpose === 'forgot_password') {
@@ -236,55 +162,232 @@ router.post('/verify-otp', async (req, res, next) => {
         user.avatar = pending.avatar || user.avatar;
         user.loginMethod = 'google';
         user.lastLogin = new Date();
+        // Ensure user has a username
+        if (!user.username) {
+          let usernameBase = user.name.toLowerCase().replace(/[^a-z0-9]/g, '');
+          if (!usernameBase) usernameBase = user.email.split('@')[0].toLowerCase().replace(/[^a-z0-9]/g, '');
+          let username = usernameBase;
+          let suffix = 1;
+          while (await User.findOne({ username })) {
+            username = `${usernameBase}${suffix}`;
+            suffix++;
+          }
+          user.username = username;
+        }
         await user.save();
-      } else {
-        user = await User.create({
-          name: pending.name,
-          email: lowerEmail,
-          avatar: pending.avatar,
-          googleId: pending.googleId,
-          isVerified: true,
-          loginMethod: 'google',
-          lastLogin: new Date(),
+
+        await deletePendingUser(lowerEmail);
+
+        // Generate JWT
+        const token = jwt.sign(
+          { userId: user._id, email: user.email, name: user.name },
+          JWT_SECRET,
+          { expiresIn: '30d' }
+        );
+
+        // Save session in Redis
+        await setSession(user._id.toString(), token);
+
+        // Set cookie (7 days)
+        res.cookie('token', token, {
+          httpOnly: true,
+          secure: process.env.NODE_ENV === 'production',
+          sameSite: 'lax',
+          maxAge: 7 * 24 * 60 * 60 * 1000,
         });
-        // Send welcome email for new Google sign up
-        await sendWelcomeEmail(user.email, user.name);
-      }
 
-      await deletePendingUser(lowerEmail);
-
-      // Generate JWT
-      const token = jwt.sign(
-        { userId: user._id, email: user.email, name: user.name },
-        JWT_SECRET,
-        { expiresIn: '30d' }
-      );
-
-      // Save session in Redis
-      await setSession(user._id.toString(), token);
-
-      // Set cookie (7 days)
-      res.cookie('token', token, {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'lax',
-        maxAge: 7 * 24 * 60 * 60 * 1000,
-      });
-
-      return res.status(200).json({
-        success: true,
-        data: {
-          token,
-          user: {
-            id: user._id,
-            name: user.name,
-            email: user.email,
-            avatar: user.avatar,
-            loginMethod: user.loginMethod,
+        return res.status(200).json({
+          success: true,
+          data: {
+            token,
+            user: {
+              id: user._id,
+              name: user.name,
+              username: user.username,
+              email: user.email,
+              avatar: user.avatar,
+              loginMethod: user.loginMethod,
+            },
           },
-        },
+        });
+      } else {
+        // User does not exist in MongoDB. Set up Google registration redirect.
+        const signupToken = crypto.randomBytes(32).toString('hex');
+        const signupTokenKey = `signup_token:${lowerEmail}`;
+        await redisClient.set(signupTokenKey, signupToken, { EX: 600 }); // valid for 10 mins
+
+        // Keep Google details in Redis to link upon completion
+        const googlePendingKey = `google_pending:${lowerEmail}`;
+        await redisClient.set(googlePendingKey, JSON.stringify({
+          googleId: pending.googleId,
+          avatar: pending.avatar,
+          name: pending.name
+        }), { EX: 600 });
+
+        await deletePendingUser(lowerEmail);
+
+        return res.status(200).json({
+          success: true,
+          data: {
+            googleSignup: true,
+            signupToken,
+            email: lowerEmail,
+            name: pending.name,
+          },
+        });
+      }
+    }
+  } catch (error) {
+    next(error);
+  }
+});
+
+// POST /api/v1/auth/register-complete (Email Signup Step 3 - Create Profile)
+router.post('/register-complete', async (req, res, next) => {
+  try {
+    const { email, signupToken, name, username, password, confirmPassword } = req.body;
+
+    if (!email || !signupToken || !name || !username || !password || !confirmPassword) {
+      return res.status(400).json({
+        success: false,
+        data: null,
+        error: 'All fields are required.',
       });
     }
+
+    if (password !== confirmPassword) {
+      return res.status(400).json({
+        success: false,
+        data: null,
+        error: 'Passwords do not match.',
+      });
+    }
+
+    if (password.length < 6) {
+      return res.status(400).json({
+        success: false,
+        data: null,
+        error: 'Password must be at least 6 characters long.',
+      });
+    }
+
+    const lowerEmail = email.toLowerCase();
+    const lowerUsername = username.toLowerCase();
+
+    // Verify signup token
+    const signupTokenKey = `signup_token:${lowerEmail}`;
+    const savedToken = await redisClient.get(signupTokenKey);
+
+    if (!savedToken || savedToken !== signupToken) {
+      return res.status(400).json({
+        success: false,
+        data: null,
+        error: 'Invalid or expired signup token. Please verify OTP again.',
+      });
+    }
+
+    // Check if email already exists in MongoDB
+    const existingEmailUser = await User.findOne({ email: lowerEmail });
+    if (existingEmailUser && existingEmailUser.isVerified) {
+      return res.status(400).json({
+        success: false,
+        data: null,
+        error: 'An account with this email already exists.',
+      });
+    }
+
+    // Check if username is already taken in MongoDB
+    const existingUsernameUser = await User.findOne({ username: lowerUsername });
+    if (existingUsernameUser) {
+      return res.status(400).json({
+        success: false,
+        data: null,
+        error: 'This username is already taken.',
+      });
+    }
+
+    const passwordHash = await bcrypt.hash(password, 10);
+
+    // Check if there are pending Google login details in Redis
+    const googlePendingKey = `google_pending:${lowerEmail}`;
+    const googlePendingRaw = await redisClient.get(googlePendingKey);
+    let googleId: string | undefined;
+    let avatar: string | undefined;
+    let loginMethod: 'email' | 'google' = 'email';
+
+    if (googlePendingRaw) {
+      try {
+        const googlePending = JSON.parse(googlePendingRaw);
+        googleId = googlePending.googleId;
+        avatar = googlePending.avatar;
+        loginMethod = 'google';
+        await redisClient.del(googlePendingKey);
+      } catch (err) {}
+    }
+
+    // If an unverified user document already exists, update it, otherwise create new
+    let user = await User.findOne({ email: lowerEmail });
+    if (user) {
+      user.name = name;
+      user.username = lowerUsername;
+      user.password = passwordHash;
+      user.isVerified = true;
+      user.loginMethod = loginMethod;
+      if (googleId) user.googleId = googleId;
+      if (avatar) user.avatar = avatar;
+      user.lastLogin = new Date();
+      await user.save();
+    } else {
+      user = await User.create({
+        name,
+        username: lowerUsername,
+        email: lowerEmail,
+        password: passwordHash,
+        isVerified: true,
+        loginMethod,
+        googleId,
+        avatar,
+        lastLogin: new Date(),
+      });
+    }
+
+    // Clean up signup token in Redis
+    await redisClient.del(signupTokenKey);
+
+    // Generate JWT
+    const token = jwt.sign(
+      { userId: user._id, email: user.email, name: user.name },
+      JWT_SECRET,
+      { expiresIn: '30d' }
+    );
+
+    // Save session in Redis
+    await setSession(user._id.toString(), token);
+
+    // Set cookie (7 days)
+    res.cookie('token', token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: 7 * 24 * 60 * 60 * 1000,
+    });
+
+    // Send welcome email
+    await sendWelcomeEmail(user.email, user.name);
+
+    return res.status(201).json({
+      success: true,
+      data: {
+        token,
+        user: {
+          id: user._id,
+          name: user.name,
+          username: user.username,
+          email: user.email,
+          loginMethod: user.loginMethod,
+        },
+      },
+    });
   } catch (error) {
     next(error);
   }
@@ -293,17 +396,23 @@ router.post('/verify-otp', async (req, res, next) => {
 // POST /api/v1/auth/login
 router.post('/login', async (req, res, next) => {
   try {
-    const { email, password } = req.body;
+    const { usernameOrEmail, password } = req.body;
 
-    if (!email || !password) {
+    if (!usernameOrEmail || !password) {
       return res.status(400).json({
         success: false,
         data: null,
-        error: 'Email and password are required.',
+        error: 'Username or email and password are required.',
       });
     }
 
-    const user = await User.findOne({ email: email.toLowerCase() });
+    const lowerInput = usernameOrEmail.toLowerCase();
+    const user = await User.findOne({
+      $or: [
+        { email: lowerInput },
+        { username: lowerInput }
+      ]
+    });
     if (!user || !user.isVerified) {
       return res.status(401).json({
         success: false,
@@ -357,6 +466,7 @@ router.post('/login', async (req, res, next) => {
         user: {
           id: user._id,
           name: user.name,
+          username: user.username,
           email: user.email,
           avatar: user.avatar,
           loginMethod: user.loginMethod,
@@ -444,22 +554,27 @@ router.post('/google-login', async (req, res, next) => {
 // POST /api/v1/auth/forgot-password
 router.post('/forgot-password', async (req, res, next) => {
   try {
-    const { email } = req.body;
+    const { emailOrUsername } = req.body;
 
-    if (!email) {
+    if (!emailOrUsername) {
       return res.status(400).json({
         success: false,
         data: null,
-        error: 'Email is required.',
+        error: 'Email or username is required.',
       });
     }
 
-    const user = await User.findOne({ email: email.toLowerCase() });
+    const user = await User.findOne({
+      $or: [
+        { email: emailOrUsername.toLowerCase() },
+        { username: emailOrUsername.toLowerCase() }
+      ]
+    });
     if (!user || !user.isVerified) {
       return res.status(404).json({
         success: false,
         data: null,
-        error: 'No account found with this email.',
+        error: 'No account found with this email or username.',
       });
     }
 
@@ -471,6 +586,7 @@ router.post('/forgot-password', async (req, res, next) => {
       });
     }
 
+    const email = user.email;
     const otp = Math.floor(100000 + Math.random() * 900000).toString(); // 6 digits
     await setOTP(email, otp, 'forgot_password');
 
@@ -482,6 +598,7 @@ router.post('/forgot-password', async (req, res, next) => {
 
     return res.status(200).json({
       success: true,
+      email: email,
       message: 'Password reset OTP sent to your email.',
     });
   } catch (error) {
