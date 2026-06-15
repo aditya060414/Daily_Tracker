@@ -91,7 +91,7 @@ router.post('/verify-otp', async (req, res, next) => {
       return res.status(400).json({
         success: false,
         data: null,
-        error: 'Maximum verification attempts exceeded (3). Please request a new OTP.',
+        error: 'Maximum verification attempts exceeded (3). Please try again after some time.',
       });
     }
 
