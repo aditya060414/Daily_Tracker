@@ -7,7 +7,6 @@ import {
   Clock,
   Notebook,
   Plus,
-  Trash2,
   Save,
   Flame,
   Award,
@@ -24,6 +23,7 @@ import { useGymStore, useDateStore } from '../store';
 import { startOfWeek, endOfWeek, parseISO, format } from 'date-fns';
 import { GymExercise } from '../types';
 import { LoadingSpinner } from '../components/LoadingSpinner';
+import { ExerciseCard } from '../components/gym/ExerciseCard';
 
 const exerciseSchema = z.object({
   name: z.string().min(1, 'Exercise name is required'),
@@ -281,7 +281,7 @@ export const GymTracker: React.FC = () => {
   }
 
   return (
-    <div className="p-6 grid grid-cols-1 xl:grid-cols-12 gap-6 select-none animate-fade-in pb-6">
+    <div className="p-4 sm:p-6 grid grid-cols-1 xl:grid-cols-12 gap-6 select-none animate-fade-in pb-6">
       {/* LEFT COLUMN: Active Gym Sheet (7 cols) */}
       <div className="xl:col-span-8 space-y-6">
         {/* Workout header controls */}
@@ -523,32 +523,12 @@ export const GymTracker: React.FC = () => {
                 </div>
               ) : (
                 exercises.map((ex, idx) => (
-                  <div key={ex._id || idx} className="flex flex-col px-4 py-3 hover:bg-card/20 transition-colors animate-item-log">
-                    <div className="grid grid-cols-12 gap-2 items-center">
-                      <div className="col-span-5 flex flex-col">
-                        <span className="text-xs font-bold text-off-white">{ex.name}</span>
-                        {ex.notes && <span className="text-[9px] text-off-white-muted mt-0.5">{ex.notes}</span>}
-                      </div>
-                      
-                      <div className="col-span-3 text-center font-mono text-xs text-off-white">
-                        {ex.sets} &times; {ex.reps}
-                      </div>
-
-                      <div className="col-span-3 text-right font-mono text-xs text-accent">
-                        {ex.weight} <span className="text-[9px] text-off-white-muted uppercase">{ex.unit}</span>
-                      </div>
-
-                      <div className="col-span-1 text-right">
-                        <button
-                          onClick={() => handleRemoveExercise(idx)}
-                          className="p-1 text-off-white-muted hover:text-red-400 transition-colors rounded"
-                          title="Remove Exercise"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    </div>
-                  </div>
+                  <ExerciseCard
+                    key={ex._id || idx}
+                    ex={ex}
+                    index={idx}
+                    onRemove={handleRemoveExercise}
+                  />
                 ))
               )}
             </div>
