@@ -1,51 +1,18 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import { z } from 'zod';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Terminal, ShieldAlert, KeyRound, User as UserIcon, Mail, Lock, ShieldCheck, ArrowRight, Chrome, Eye, EyeOff } from 'lucide-react';
+import { ShieldAlert, ShieldCheck, KeyRound, Chrome } from 'lucide-react';
 import { authApi } from '../api';
 import { useAuthStore } from '../store';
 
-// Schemas for form validation
-const loginSchema = z.object({
-  usernameOrEmail: z.string().min(3, 'Username or email must be at least 3 characters'),
-  password: z.string().min(6, 'Password must be at least 6 characters'),
-});
-
-const registerEmailSchema = z.object({
-  email: z.string().email('Please enter a valid email address'),
-});
-
-const registerProfileSchema = z.object({
-  name: z.string().min(2, 'Name must be at least 2 characters'),
-  username: z.string()
-    .min(3, 'Username must be at least 3 characters')
-    .regex(/^[a-zA-Z0-9_]+$/, 'Username can only contain letters, numbers, and underscores'),
-  password: z.string().min(6, 'Password must be at least 6 characters'),
-  confirmPassword: z.string().min(6, 'Confirm password must be at least 6 characters'),
-}).refine((data) => data.password === data.confirmPassword, {
-  message: "Passwords do not match",
-  path: ["confirmPassword"],
-});
-
-const forgotSchema = z.object({
-  emailOrUsername: z.string().min(3, 'Email or username must be at least 3 characters'),
-});
-
-const resetSchema = z.object({
-  password: z.string().min(6, 'Password must be at least 6 characters'),
-  confirmPassword: z.string().min(6, 'Confirm password must be at least 6 characters'),
-}).refine((data) => data.password === data.confirmPassword, {
-  message: "Passwords do not match",
-  path: ["confirmPassword"],
-});
-
-type LoginValues = z.infer<typeof loginSchema>;
-type RegisterEmailValues = z.infer<typeof registerEmailSchema>;
-type RegisterProfileValues = z.infer<typeof registerProfileSchema>;
-type ForgotValues = z.infer<typeof forgotSchema>;
-type ResetValues = z.infer<typeof resetSchema>;
+// Import subcomponents
+import { SystemInfoPanel } from '../components/auth/SystemInfoPanel';
+import { LoginForm, LoginValues } from '../components/auth/LoginForm';
+import { RegisterEmailForm, RegisterEmailValues } from '../components/auth/RegisterEmailForm';
+import { RegisterProfileForm, RegisterProfileValues } from '../components/auth/RegisterProfileForm';
+import { ForgotPasswordForm, ForgotValues } from '../components/auth/ForgotPasswordForm';
+import { ResetPasswordForm, ResetValues } from '../components/auth/ResetPasswordForm';
+import { OtpModal } from '../components/auth/OtpModal';
+import { GoogleSimChooser } from '../components/auth/GoogleSimChooser';
 
 type AuthMode = 'login' | 'register' | 'forgot' | 'reset';
 
@@ -61,28 +28,20 @@ export const Login: React.FC = () => {
   // OTP modal state
   const [showOtpModal, setShowOtpModal] = useState(false);
   const [otpEmail, setOtpEmail] = useState('');
-  const [otpPurpose, setOtpPurpose] = useState<'signup' | 'forgot_password' | 'google_login'>('signup');
-  const [otpDigits, setOtpDigits] = useState(['', '', '', '', '', '']);
+  const [otpPurpose] = useState<'signup' | 'forgot_password' | 'google_login'>('signup');
+  const [otpDigits, setOtpDigits] = useState<string[]>(['', '', '', '', '', '']);
   const [otpAttemptsLeft, setOtpAttemptsLeft] = useState(3);
   const [otpError, setOtpError] = useState<string | null>(null);
   const [tempResetToken, setTempResetToken] = useState('');
   const [tempSignupToken, setTempSignupToken] = useState('');
   const [googleCredential, setGoogleCredential] = useState<string>('');
-
-  // Peek password states
-  const [showLoginPassword, setShowLoginPassword] = useState(false);
-  const [showRegisterPassword, setShowRegisterPassword] = useState(false);
-  const [showRegisterConfirmPassword, setShowRegisterConfirmPassword] = useState(false);
-  const [showResetPassword, setShowResetPassword] = useState(false);
-  const [showResetConfirmPassword, setShowResetConfirmPassword] = useState(false);
+  const [googlePrefilledName, setGooglePrefilledName] = useState('');
 
   // Simulated Google account chooser state
   const [showGoogleChooser, setShowGoogleChooser] = useState(false);
   const [customSimEmail, setCustomSimEmail] = useState('');
   const [customSimName, setCustomSimName] = useState('');
   const [showCustomSimForm, setShowCustomSimForm] = useState(false);
-
-  const otpInputRefs = useRef<(HTMLInputElement | null)[]>([]);
 
   // 1. Google Identity Services Script loader
   useEffect(() => {
@@ -107,7 +66,6 @@ export const Login: React.FC = () => {
     };
 
     return () => {
-      // Avoid removing if other components need it, but safe here
       try {
         document.head.removeChild(script);
       } catch (e) {}
@@ -122,21 +80,17 @@ export const Login: React.FC = () => {
       setGoogleCredential(credential);
       const res = await authApi.googleLogin(credential);
       if (res.success) {
-        if (res.pendingOtp && res.email) {
-          setOtpEmail(res.email);
-          setOtpPurpose('google_login');
-          setOtpDigits(['', '', '', '', '', '']);
-          setOtpAttemptsLeft(3);
-          setOtpError(null);
-          setShowOtpModal(true);
+        const data = (res as any).data;
+        if (data && data.googleSignup) {
+          setOtpEmail(data.email || '');
+          setTempSignupToken(data.signupToken || '');
+          setGooglePrefilledName(data.name || '');
+          setMode('register');
+        } else if (data && data.token && data.user) {
+          setAuth(data.token, data.user);
+          navigate('/');
         } else {
-          const data = (res as any).data;
-          if (data && data.token && data.user) {
-            setAuth(data.token, data.user);
-            navigate('/');
-          } else {
-            setServerError('Google Login failed: Invalid response format');
-          }
+          setServerError('Google Login failed: Invalid response format');
         }
       } else {
         setServerError(res.error || 'Google Login failed');
@@ -174,21 +128,17 @@ export const Login: React.FC = () => {
 
       const res = await authApi.googleLogin(mockCredential);
       if (res.success) {
-        if (res.pendingOtp && res.email) {
-          setOtpEmail(res.email);
-          setOtpPurpose('google_login');
-          setOtpDigits(['', '', '', '', '', '']);
-          setOtpAttemptsLeft(3);
-          setOtpError(null);
-          setShowOtpModal(true);
+        const data = (res as any).data;
+        if (data && data.googleSignup) {
+          setOtpEmail(data.email || '');
+          setTempSignupToken(data.signupToken || '');
+          setGooglePrefilledName(data.name || '');
+          setMode('register');
+        } else if (data && data.token && data.user) {
+          setAuth(data.token, data.user);
+          navigate('/');
         } else {
-          const data = (res as any).data;
-          if (data && data.token && data.user) {
-            setAuth(data.token, data.user);
-            navigate('/');
-          } else {
-            setServerError('Simulated Google Login failed: Invalid response format');
-          }
+          setServerError('Simulated Google Login failed: Invalid response format');
         }
       } else {
         setServerError(res.error || 'Simulated Google Login failed');
@@ -200,14 +150,7 @@ export const Login: React.FC = () => {
     }
   };
 
-  // 2. React Hook Forms setup
-  const loginForm = useForm<LoginValues>({ resolver: zodResolver(loginSchema) });
-  const registerEmailForm = useForm<RegisterEmailValues>({ resolver: zodResolver(registerEmailSchema) });
-  const registerProfileForm = useForm<RegisterProfileValues>({ resolver: zodResolver(registerProfileSchema) });
-  const forgotForm = useForm<ForgotValues>({ resolver: zodResolver(forgotSchema) });
-  const resetForm = useForm<ResetValues>({ resolver: zodResolver(resetSchema) });
-
-  // 3. Form submission handlers
+  // Submission handlers
   const onLoginSubmit = async (values: LoginValues) => {
     setLoading(true);
     setServerError(null);
@@ -231,13 +174,10 @@ export const Login: React.FC = () => {
     setServerError(null);
     try {
       const res = await authApi.register(values.email);
-      if (res.success) {
+      if (res.success && res.data) {
         setOtpEmail(values.email);
-        setOtpPurpose('signup');
-        setOtpDigits(['', '', '', '', '', '']);
-        setOtpAttemptsLeft(3);
-        setOtpError(null);
-        setShowOtpModal(true);
+        setTempSignupToken(res.data.signupToken || '');
+        setShowOtpModal(false);
       } else {
         setServerError(res.error || 'Failed to register account');
       }
@@ -284,12 +224,10 @@ export const Login: React.FC = () => {
     try {
       const res = await authApi.forgotPassword(values.emailOrUsername);
       if (res.success && res.data) {
-        setOtpEmail(res.data.email);
-        setOtpPurpose('forgot_password');
-        setOtpDigits(['', '', '', '', '', '']);
-        setOtpAttemptsLeft(3);
-        setOtpError(null);
-        setShowOtpModal(true);
+        setOtpEmail(res.data.email || values.emailOrUsername);
+        setTempResetToken(res.data.resetToken || '');
+        setShowOtpModal(false);
+        setMode('reset');
       } else {
         setServerError(res.error || 'Password reset request failed');
       }
@@ -314,7 +252,6 @@ export const Login: React.FC = () => {
         setServerSuccess('Password reset successful. Please login with your new password.');
         setMode('login');
         setTempResetToken('');
-        resetForm.reset();
       } else {
         setServerError(res.error || 'Failed to reset password');
       }
@@ -323,58 +260,6 @@ export const Login: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
-
-  // 4. OTP verification modal handlers
-  const handleOtpChange = (index: number, value: string) => {
-    if (isNaN(Number(value))) return;
-    const newDigits = [...otpDigits];
-    newDigits[index] = value.substring(value.length - 1);
-    setOtpDigits(newDigits);
-
-    // Auto-focus next input
-    if (value && index < 5) {
-      otpInputRefs.current[index + 1]?.focus();
-    }
-  };
-
-  const handleOtpKeyDown = (index: number, e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Backspace') {
-      e.preventDefault();
-      const newDigits = [...otpDigits];
-      if (otpDigits[index]) {
-        // Clear current box and focus previous box
-        newDigits[index] = '';
-        setOtpDigits(newDigits);
-        if (index > 0) {
-          otpInputRefs.current[index - 1]?.focus();
-        }
-      } else if (index > 0) {
-        // Clear previous box and focus it
-        newDigits[index - 1] = '';
-        setOtpDigits(newDigits);
-        otpInputRefs.current[index - 1]?.focus();
-      }
-    }
-  };
-
-  const handleOtpPaste = (e: React.ClipboardEvent<HTMLInputElement>) => {
-    e.preventDefault();
-    const pastedData = e.clipboardData.getData('text');
-    const digitsOnly = pastedData.replace(/\D/g, '').slice(0, 6);
-    if (!digitsOnly) return;
-
-    const newDigits = [...otpDigits];
-    for (let i = 0; i < 6; i++) {
-      if (i < digitsOnly.length) {
-        newDigits[i] = digitsOnly[i];
-      }
-    }
-    setOtpDigits(newDigits);
-
-    // Focus the last filled box
-    const focusIndex = Math.min(5, digitsOnly.length - 1);
-    otpInputRefs.current[focusIndex]?.focus();
   };
 
   const handleOtpSubmit = async () => {
@@ -391,21 +276,18 @@ export const Login: React.FC = () => {
       if (res.success && res.data) {
         setShowOtpModal(false);
         if (otpPurpose === 'signup') {
-          // Store the signup token so they can choose username, name, and password
           setTempSignupToken(res.data.signupToken || '');
         } else if (otpPurpose === 'google_login') {
           if (res.data.googleSignup) {
-            // Google account is not present in data. Redirect to profile registration gateway.
             setOtpEmail(res.data.email || '');
             setTempSignupToken(res.data.signupToken || '');
-            registerProfileForm.setValue('name', res.data.name || '');
+            setGooglePrefilledName(res.data.name || '');
             setMode('register');
           } else if (res.data.token && res.data.user) {
             setAuth(res.data.token, res.data.user);
             navigate('/');
           }
         } else {
-          // Pass temporary reset token to resetting view
           setTempResetToken(res.data.resetToken || '');
           setMode('reset');
         }
@@ -415,7 +297,6 @@ export const Login: React.FC = () => {
     } catch (err: any) {
       const errorMsg = err.response?.data?.error || 'Invalid verification code';
       setOtpError(errorMsg);
-      // Reduce attempts locally if attempts counter returned
       if (errorMsg.includes('attempts')) {
         setOtpAttemptsLeft((prev) => Math.max(0, prev - 1));
       }
@@ -455,79 +336,48 @@ export const Login: React.FC = () => {
     }
   };
 
+  // Social Login node to inject into form containers
+  const socialLoginBlock = (
+    <div className="mt-6 space-y-4">
+      <div className="relative">
+        <div className="absolute inset-0 flex items-center">
+          <div className="w-full border-t border-border"></div>
+        </div>
+        <div className="relative flex justify-center text-[9px] uppercase tracking-widest">
+          <span className="bg-panel px-3 text-off-white-muted">OR_SECURE_AUTH</span>
+        </div>
+      </div>
+
+      <div className="flex justify-center w-full">
+        {(import.meta as any).env.VITE_GOOGLE_CLIENT_ID ? (
+          <div id="google-gis-button" className="w-full"></div>
+        ) : (
+          <button
+            type="button"
+            onClick={handleSimulatedGoogleLogin}
+            disabled={loading}
+            className="w-full py-2 border border-border hover:border-accent/30 rounded bg-card/50 hover:bg-card text-xs flex items-center justify-center gap-2 hover:text-accent font-bold transition-all"
+          >
+            <Chrome className="w-4 h-4 text-accent shrink-0" />
+            <span>CONTINUE_WITH_GOOGLE [SIM]</span>
+          </button>
+        )}
+      </div>
+    </div>
+  );
+
   return (
     <div className="min-h-screen flex bg-darkbg text-off-white relative overflow-hidden select-none font-mono">
       {/* Grid background effect */}
       <div className="absolute inset-0 bg-[linear-gradient(to_right,#141414_1px,transparent_1px),linear-gradient(to_bottom,#141414_1px,transparent_1px)] bg-[size:4rem_4rem] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_50%,#000_70%,transparent_100%)] opacity-35 z-0"></div>
 
-      {/* LEFT SIDE: Branding, Status Logs, and Mock Dashboard (Visible on md+) */}
-      <div className="hidden lg:flex flex-col w-1/2 justify-between p-12 border-r border-border bg-panel/20 relative z-10">
-        <div>
-          {/* Header Branding */}
-          <div className="flex items-center gap-3">
-            <div className="p-1.5 rounded bg-accent/25 border border-accent/40 text-accent glow-accent">
-              <Terminal className="w-5 h-5 animate-pulse" />
-            </div>
-            <span className="text-md font-bold tracking-widest text-off-white">DAILY_OS</span>
-            <span className="text-[9px] bg-border text-off-white-muted border border-border px-1 rounded">SYS_SEC_V1.2</span>
-          </div>
+      {/* Brand & system info logs panel */}
+      <SystemInfoPanel />
 
-          {/* Motivational System Logs */}
-          <div className="mt-16 max-w-md">
-            <h1 className="text-xl font-bold tracking-wide text-off-white leading-tight">
-              HOST_SEQ: ORGANIZE_YOUR_DAY.
-            </h1>
-            <p className="text-xs text-off-white-muted mt-2 leading-relaxed italic">
-              "We are what we repeatedly do. Excellence, then, is not an act, but a habit." — system_override
-            </p>
-          </div>
-        </div>
-
-        {/* Mock Terminal Dashboard Preview */}
-        <div className="border border-border bg-darkbg/90 rounded-lg p-5 shadow-2xl glow-accent-strong w-full max-w-lg mb-10 overflow-hidden relative">
-          <div className="flex justify-between items-center border-b border-border pb-2.5 mb-4 text-[10px] text-accent">
-            <span>PREVIEW: SYSTEM_OVERVIEW.LOG</span>
-            <div className="flex gap-1">
-              <span className="w-1.5 h-1.5 rounded-full bg-accent"></span>
-              <span className="w-1.5 h-1.5 rounded-full bg-accent-dim"></span>
-            </div>
-          </div>
-          <div className="space-y-2 text-[10px] text-off-white-muted">
-            <div className="flex justify-between">
-              <span>[SYSTEM_LOAD_STATUS]</span>
-              <span className="text-green-400">ONLINE</span>
-            </div>
-            <div className="flex justify-between">
-              <span>[ACTIVE_TIMELINE_NODES]</span>
-              <span>8 BLOCKS CONFIG</span>
-            </div>
-            <div className="flex justify-between">
-              <span>[GYM_ROUTINE_STATE]</span>
-              <span>WORKOUT_COMPLETE [120 min]</span>
-            </div>
-            <div className="flex justify-between">
-              <span>[TOTAL_POINTS_DAILY]</span>
-              <span className="text-accent">+45 PTS (GOAL_REACHED)</span>
-            </div>
-            <div className="pt-3 border-t border-border mt-3">
-              <div className="flex justify-between text-off-white">
-                <span>ACTIVE_USER_SESSION:</span>
-                <span>NONE (SECURE_GATEWAY_REQUIRED)</span>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Footer */}
-        <div className="text-[10px] text-off-white-muted">
-          DAILY_OS CORE ENGINE // ALL RIGHTS SECURED.
-        </div>
-      </div>
-
-      {/* RIGHT SIDE: Auth Form Gateways */}
+      {/* Right side form gateway */}
       <div className="w-full lg:w-1/2 flex items-center justify-center p-6 sm:p-12 relative z-10">
         <div className="w-full max-w-md bg-panel border border-border rounded-lg shadow-2xl overflow-hidden glow-accent-strong animate-fade-in">
-          {/* Form Header bar */}
+          {/* Header bar decor */}
           <div className="flex items-center justify-between px-5 py-3.5 bg-card border-b border-border">
             <div className="flex items-center gap-2 text-accent">
               <KeyRound className="w-4 h-4 shrink-0" />
@@ -546,7 +396,7 @@ export const Login: React.FC = () => {
           </div>
 
           <div className="p-8">
-            {/* Title */}
+            {/* Title / Description */}
             <div className="text-center mb-6">
               <h2 className="text-lg font-bold tracking-wider text-off-white uppercase">
                 {mode === 'login' && 'GATEWAY_BOOT_IN'}
@@ -562,7 +412,7 @@ export const Login: React.FC = () => {
               </p>
             </div>
 
-            {/* General Server Error / Success Alert */}
+            {/* General Server Alert Messages */}
             {serverError && (
               <div className="flex items-start gap-2.5 p-3 mb-5 rounded bg-red-500/10 border border-red-500/20 text-red-400 text-xs leading-relaxed animate-fade-in">
                 <ShieldAlert className="w-4 h-4 shrink-0 mt-0.5" />
@@ -576,404 +426,57 @@ export const Login: React.FC = () => {
               </div>
             )}
 
-            {/* ========================================================
-                LOGIN FORM
-                ======================================================== */}
+            {/* Sub-form Render block */}
             {mode === 'login' && (
-              <form onSubmit={loginForm.handleSubmit(onLoginSubmit)} className="space-y-4">
-                <div className="space-y-1.5">
-                  <label className="text-[10px] uppercase tracking-wider text-off-white-muted flex items-center gap-1.5">
-                    <UserIcon className="w-3 h-3 text-accent" /> Username or Email Address
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="e.g. aditya or aditya@dailyos.host"
-                    className={`w-full px-3 py-2 text-xs bg-darkbg border rounded text-off-white placeholder-off-white-muted focus:border-accent outline-none transition-all ${
-                      loginForm.formState.errors.usernameOrEmail ? 'border-red-500/50' : 'border-border'
-                    }`}
-                    {...loginForm.register('usernameOrEmail')}
-                  />
-                  {loginForm.formState.errors.usernameOrEmail && (
-                    <p className="text-[10px] text-red-400 mt-0.5">{loginForm.formState.errors.usernameOrEmail.message}</p>
-                  )}
-                </div>
-
-                <div className="space-y-1.5">
-                  <div className="flex justify-between items-center">
-                    <label className="text-[10px] uppercase tracking-wider text-off-white-muted flex items-center gap-1.5">
-                      <Lock className="w-3 h-3 text-accent" /> Password
-                    </label>
-                    <button
-                      type="button"
-                      onClick={() => setMode('forgot')}
-                      className="text-[10px] text-accent hover:underline focus:outline-none uppercase tracking-wider"
-                    >
-                      Forgot?
-                    </button>
-                  </div>
-                  <div className="relative">
-                    <input
-                      type={showLoginPassword ? 'text' : 'password'}
-                      placeholder="••••••••"
-                      className={`w-full pl-3 pr-10 py-2 text-xs bg-darkbg border rounded text-off-white placeholder-off-white-muted focus:border-accent outline-none transition-all ${
-                        loginForm.formState.errors.password ? 'border-red-500/50' : 'border-border'
-                      }`}
-                      {...loginForm.register('password')}
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowLoginPassword(!showLoginPassword)}
-                      className="absolute inset-y-0 right-0 pr-3 flex items-center text-off-white-muted hover:text-accent focus:outline-none transition-colors"
-                    >
-                      {showLoginPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                    </button>
-                  </div>
-                  {loginForm.formState.errors.password && (
-                    <p className="text-[10px] text-red-400 mt-0.5">{loginForm.formState.errors.password.message}</p>
-                  )}
-                </div>
-
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="w-full py-2.5 rounded bg-accent hover:bg-accent-dim text-darkbg hover:text-off-white font-bold text-xs uppercase tracking-wider transition-all duration-150 flex justify-center items-center gap-1.5"
-                >
-                  {loading ? (
-                    <>
-                      <span className="w-3 h-3 border-2 border-darkbg border-t-transparent rounded-full animate-spin"></span>
-                      <span>BOOTING_SYSTEM...</span>
-                    </>
-                  ) : (
-                    <>
-                      <span>INIT_BOOT_SEQUENCE</span>
-                      <ArrowRight className="w-3.5 h-3.5" />
-                    </>
-                  )}
-                </button>
-              </form>
+              <LoginForm
+                onSubmit={onLoginSubmit}
+                onForgotPassword={() => {
+                  setMode('forgot');
+                  setServerError(null);
+                  setServerSuccess(null);
+                }}
+                loading={loading}
+                socialLogin={socialLoginBlock}
+              />
             )}
 
-            {/* ========================================================
-                REGISTER FORM
-                ======================================================== */}
             {mode === 'register' && !tempSignupToken && (
-              <form onSubmit={registerEmailForm.handleSubmit(onRegisterEmailSubmit)} className="space-y-4">
-                <div className="space-y-1.5">
-                  <label className="text-[10px] uppercase tracking-wider text-off-white-muted flex items-center gap-1.5">
-                    <Mail className="w-3 h-3 text-accent" /> Email Address
-                  </label>
-                  <input
-                    type="email"
-                    placeholder="e.g. aditya@dailyos.host"
-                    className={`w-full px-3 py-2 text-xs bg-darkbg border rounded text-off-white placeholder-off-white-muted focus:border-accent outline-none transition-all ${
-                      registerEmailForm.formState.errors.email ? 'border-red-500/50' : 'border-border'
-                    }`}
-                    {...registerEmailForm.register('email')}
-                  />
-                  {registerEmailForm.formState.errors.email && (
-                    <p className="text-[10px] text-red-400 mt-0.5">{registerEmailForm.formState.errors.email.message}</p>
-                  )}
-                </div>
-
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="w-full py-2.5 rounded bg-accent hover:bg-accent-dim text-darkbg hover:text-off-white font-bold text-xs uppercase tracking-wider transition-all duration-150 flex justify-center items-center gap-1.5"
-                >
-                  {loading ? (
-                    <>
-                      <span className="w-3 h-3 border-2 border-darkbg border-t-transparent rounded-full animate-spin"></span>
-                      <span>SENDING_OTP...</span>
-                    </>
-                  ) : (
-                    <>
-                      <span>SEND_VERIFICATION_OTP</span>
-                      <ArrowRight className="w-3.5 h-3.5" />
-                    </>
-                  )}
-                </button>
-              </form>
+              <RegisterEmailForm
+                onSubmit={onRegisterEmailSubmit}
+                loading={loading}
+                socialLogin={socialLoginBlock}
+              />
             )}
 
             {mode === 'register' && tempSignupToken && (
-              <form onSubmit={registerProfileForm.handleSubmit(onRegisterProfileSubmit)} className="space-y-4">
-                <div className="flex items-center gap-2 p-2.5 rounded bg-green-500/10 border border-green-500/20 text-green-400 text-[10px] mb-2 animate-fade-in">
-                  <ShieldCheck className="w-4 h-4 shrink-0" />
-                  <span>Email verified: <strong>{otpEmail}</strong></span>
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="text-[10px] uppercase tracking-wider text-off-white-muted flex items-center gap-1.5">
-                    <UserIcon className="w-3 h-3 text-accent" /> Full Name
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="e.g. Aditya Kumar"
-                    className={`w-full px-3 py-2 text-xs bg-darkbg border rounded text-off-white placeholder-off-white-muted focus:border-accent outline-none transition-all ${
-                      registerProfileForm.formState.errors.name ? 'border-red-500/50' : 'border-border'
-                    }`}
-                    {...registerProfileForm.register('name')}
-                  />
-                  {registerProfileForm.formState.errors.name && (
-                    <p className="text-[10px] text-red-400 mt-0.5">{registerProfileForm.formState.errors.name.message}</p>
-                  )}
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="text-[10px] uppercase tracking-wider text-off-white-muted flex items-center gap-1.5">
-                    <UserIcon className="w-3 h-3 text-accent" /> Choose Username
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="e.g. adityakumar"
-                    className={`w-full px-3 py-2 text-xs bg-darkbg border rounded text-off-white placeholder-off-white-muted focus:border-accent outline-none transition-all ${
-                      registerProfileForm.formState.errors.username ? 'border-red-500/50' : 'border-border'
-                    }`}
-                    {...registerProfileForm.register('username')}
-                  />
-                  {registerProfileForm.formState.errors.username && (
-                    <p className="text-[10px] text-red-400 mt-0.5">{registerProfileForm.formState.errors.username.message}</p>
-                  )}
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="text-[10px] uppercase tracking-wider text-off-white-muted flex items-center gap-1.5">
-                    <Lock className="w-3 h-3 text-accent" /> Password
-                  </label>
-                  <div className="relative">
-                    <input
-                      type={showRegisterPassword ? 'text' : 'password'}
-                      placeholder="••••••••"
-                      className={`w-full pl-3 pr-10 py-2 text-xs bg-darkbg border rounded text-off-white placeholder-off-white-muted focus:border-accent outline-none transition-all ${
-                        registerProfileForm.formState.errors.password ? 'border-red-500/50' : 'border-border'
-                      }`}
-                      {...registerProfileForm.register('password')}
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowRegisterPassword(!showRegisterPassword)}
-                      className="absolute inset-y-0 right-0 pr-3 flex items-center text-off-white-muted hover:text-accent focus:outline-none transition-colors"
-                    >
-                      {showRegisterPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                    </button>
-                  </div>
-                  {registerProfileForm.formState.errors.password && (
-                    <p className="text-[10px] text-red-400 mt-0.5">{registerProfileForm.formState.errors.password.message}</p>
-                  )}
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="text-[10px] uppercase tracking-wider text-off-white-muted flex items-center gap-1.5">
-                    <Lock className="w-3 h-3 text-accent" /> Confirm Password
-                  </label>
-                  <div className="relative">
-                    <input
-                      type={showRegisterConfirmPassword ? 'text' : 'password'}
-                      placeholder="••••••••"
-                      className={`w-full pl-3 pr-10 py-2 text-xs bg-darkbg border rounded text-off-white placeholder-off-white-muted focus:border-accent outline-none transition-all ${
-                        registerProfileForm.formState.errors.confirmPassword ? 'border-red-500/50' : 'border-border'
-                      }`}
-                      {...registerProfileForm.register('confirmPassword')}
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowRegisterConfirmPassword(!showRegisterConfirmPassword)}
-                      className="absolute inset-y-0 right-0 pr-3 flex items-center text-off-white-muted hover:text-accent focus:outline-none transition-colors"
-                    >
-                      {showRegisterConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                    </button>
-                  </div>
-                  {registerProfileForm.formState.errors.confirmPassword && (
-                    <p className="text-[10px] text-red-400 mt-0.5">{registerProfileForm.formState.errors.confirmPassword.message}</p>
-                  )}
-                </div>
-
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="w-full py-2.5 rounded bg-accent hover:bg-accent-dim text-darkbg hover:text-off-white font-bold text-xs uppercase tracking-wider transition-all duration-150 flex justify-center items-center gap-1.5"
-                >
-                  {loading ? (
-                    <>
-                      <span className="w-3 h-3 border-2 border-darkbg border-t-transparent rounded-full animate-spin"></span>
-                      <span>CREATING_ACCOUNT...</span>
-                    </>
-                  ) : (
-                    <>
-                      <span>CREATE_ACCOUNT</span>
-                      <ArrowRight className="w-3.5 h-3.5" />
-                    </>
-                  )}
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    setTempSignupToken('');
-                    setOtpEmail('');
-                  }}
-                  className="w-full text-center text-[9px] uppercase tracking-wider text-off-white-muted hover:underline mt-2"
-                >
-                  Use different email
-                </button>
-              </form>
+              <RegisterProfileForm
+                email={otpEmail}
+                initialName={googlePrefilledName}
+                onSubmit={onRegisterProfileSubmit}
+                onUseDifferentEmail={() => {
+                  setTempSignupToken('');
+                  setOtpEmail('');
+                  setGooglePrefilledName('');
+                }}
+                loading={loading}
+              />
             )}
 
-            {/* ========================================================
-                FORGOT PASSWORD FORM
-                ======================================================== */}
             {mode === 'forgot' && (
-              <form onSubmit={forgotForm.handleSubmit(onForgotSubmit)} className="space-y-4">
-                <div className="space-y-1.5">
-                  <label className="text-[10px] uppercase tracking-wider text-off-white-muted flex items-center gap-1.5">
-                    <UserIcon className="w-3 h-3 text-accent" /> Username or Email Address
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="e.g. aditya or aditya@dailyos.host"
-                    className={`w-full px-3 py-2 text-xs bg-darkbg border rounded text-off-white placeholder-off-white-muted focus:border-accent outline-none transition-all ${
-                      forgotForm.formState.errors.emailOrUsername ? 'border-red-500/50' : 'border-border'
-                    }`}
-                    {...forgotForm.register('emailOrUsername')}
-                  />
-                  {forgotForm.formState.errors.emailOrUsername && (
-                    <p className="text-[10px] text-red-400 mt-0.5">{forgotForm.formState.errors.emailOrUsername.message}</p>
-                  )}
-                </div>
-
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="w-full py-2.5 rounded bg-accent hover:bg-accent-dim text-darkbg hover:text-off-white font-bold text-xs uppercase tracking-wider transition-all duration-150 flex justify-center items-center gap-1.5"
-                >
-                  {loading ? (
-                    <>
-                      <span className="w-3 h-3 border-2 border-darkbg border-t-transparent rounded-full animate-spin"></span>
-                      <span>SENDING_OTP...</span>
-                    </>
-                  ) : (
-                    <>
-                      <span>DISPATCH_OTP_OVERRIDE</span>
-                      <ArrowRight className="w-3.5 h-3.5" />
-                    </>
-                  )}
-                </button>
-              </form>
+              <ForgotPasswordForm
+                onSubmit={onForgotSubmit}
+                loading={loading}
+              />
             )}
 
-            {/* ========================================================
-                RESET PASSWORD FORM
-                ======================================================== */}
             {mode === 'reset' && (
-              <form onSubmit={resetForm.handleSubmit(onResetSubmit)} className="space-y-4">
-                <div className="space-y-1.5">
-                  <label className="text-[10px] uppercase tracking-wider text-off-white-muted flex items-center gap-1.5">
-                    <Lock className="w-3 h-3 text-accent" /> New Password
-                  </label>
-                  <div className="relative">
-                    <input
-                      type={showResetPassword ? 'text' : 'password'}
-                      placeholder="••••••••"
-                      className={`w-full pl-3 pr-10 py-2 text-xs bg-darkbg border rounded text-off-white placeholder-off-white-muted focus:border-accent outline-none transition-all ${
-                        resetForm.formState.errors.password ? 'border-red-500/50' : 'border-border'
-                      }`}
-                      {...resetForm.register('password')}
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowResetPassword(!showResetPassword)}
-                      className="absolute inset-y-0 right-0 pr-3 flex items-center text-off-white-muted hover:text-accent focus:outline-none transition-colors"
-                    >
-                      {showResetPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                    </button>
-                  </div>
-                  {resetForm.formState.errors.password && (
-                    <p className="text-[10px] text-red-400 mt-0.5">{resetForm.formState.errors.password.message}</p>
-                  )}
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="text-[10px] uppercase tracking-wider text-off-white-muted flex items-center gap-1.5">
-                    <Lock className="w-3 h-3 text-accent" /> Confirm New Password
-                  </label>
-                  <div className="relative">
-                    <input
-                      type={showResetConfirmPassword ? 'text' : 'password'}
-                      placeholder="••••••••"
-                      className={`w-full pl-3 pr-10 py-2 text-xs bg-darkbg border rounded text-off-white placeholder-off-white-muted focus:border-accent outline-none transition-all ${
-                        resetForm.formState.errors.confirmPassword ? 'border-red-500/50' : 'border-border'
-                      }`}
-                      {...resetForm.register('confirmPassword')}
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowResetConfirmPassword(!showResetConfirmPassword)}
-                      className="absolute inset-y-0 right-0 pr-3 flex items-center text-off-white-muted hover:text-accent focus:outline-none transition-colors"
-                    >
-                      {showResetConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                    </button>
-                  </div>
-                  {resetForm.formState.errors.confirmPassword && (
-                    <p className="text-[10px] text-red-400 mt-0.5">{resetForm.formState.errors.confirmPassword.message}</p>
-                  )}
-                </div>
-
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="w-full py-2.5 rounded bg-accent hover:bg-accent-dim text-darkbg hover:text-off-white font-bold text-xs uppercase tracking-wider transition-all duration-150 flex justify-center items-center gap-1.5"
-                >
-                  {loading ? (
-                    <>
-                      <span className="w-3 h-3 border-2 border-darkbg border-t-transparent rounded-full animate-spin"></span>
-                      <span>OVERRIDING_CREDENTIALS...</span>
-                    </>
-                  ) : (
-                    <>
-                      <span>CONFIRM_RESET_OVERRIDE</span>
-                      <ArrowRight className="w-3.5 h-3.5" />
-                    </>
-                  )}
-                </button>
-              </form>
+              <ResetPasswordForm
+                onSubmit={onResetSubmit}
+                loading={loading}
+              />
             )}
 
-            {/* ========================================================
-                SOCIAL LOGIN BLOCK
-                ======================================================== */}
-            {(mode === 'login' || (mode === 'register' && !tempSignupToken)) && (
-              <div className="mt-6 space-y-4">
-                <div className="relative">
-                  <div className="absolute inset-0 flex items-center">
-                    <div className="w-full border-t border-border"></div>
-                  </div>
-                  <div className="relative flex justify-center text-[9px] uppercase tracking-widest">
-                    <span className="bg-panel px-3 text-off-white-muted">OR_SECURE_AUTH</span>
-                  </div>
-                </div>
-
-                {/* Google Sign-in buttons */}
-                <div className="flex justify-center w-full">
-                  {(import.meta as any).env.VITE_GOOGLE_CLIENT_ID ? (
-                    <div id="google-gis-button" className="w-full"></div>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={handleSimulatedGoogleLogin}
-                      disabled={loading}
-                      className="w-full py-2 border border-border hover:border-accent/30 rounded bg-card/50 hover:bg-card text-xs flex items-center justify-center gap-2 hover:text-accent font-bold transition-all"
-                    >
-                      <Chrome className="w-4 h-4 text-accent shrink-0" />
-                      <span>CONTINUE_WITH_GOOGLE [SIM]</span>
-                    </button>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {/* ========================================================
-                MODE SWITCHERS
-                ======================================================== */}
+            {/* Gateway Mode Toggles */}
             <div className="mt-6 text-center border-t border-border pt-4">
               {mode === 'login' && (
                 <button
@@ -996,6 +499,7 @@ export const Login: React.FC = () => {
                     setServerError(null);
                     setServerSuccess(null);
                     setTempSignupToken('');
+                    setGooglePrefilledName('');
                   }}
                   className="text-[10px] text-accent hover:underline uppercase tracking-wider"
                 >
@@ -1020,211 +524,33 @@ export const Login: React.FC = () => {
         </div>
       </div>
 
-      {/* ========================================================
-          OTP VERIFICATION MODAL OVERLAY
-          ======================================================== */}
-      {showOtpModal && (
-        <div className="fixed inset-0 bg-darkbg/85 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="w-full max-w-sm bg-panel border border-border rounded-lg shadow-2xl p-6 glow-accent animate-fade-in font-mono">
-            {/* Modal Header */}
-            <div className="flex justify-between items-center border-b border-border pb-3 mb-4">
-              <span className="text-xs font-bold text-accent tracking-widest uppercase">
-                {otpPurpose === 'signup' ? 'SIGNUP_OTP_GATE' : otpPurpose === 'google_login' ? 'GOOGLE_OTP_GATE' : 'FORGOT_OTP_GATE'}
-              </span>
-              <span className="text-[10px] bg-border px-1.5 py-0.5 rounded text-off-white-muted">
-                PENDING_VERIFY
-              </span>
-            </div>
+      {/* OTP verification modal overlay */}
+      <OtpModal
+        isOpen={showOtpModal}
+        onClose={() => setShowOtpModal(false)}
+        otpEmail={otpEmail}
+        otpPurpose={otpPurpose}
+        otpDigits={otpDigits}
+        setOtpDigits={setOtpDigits}
+        otpAttemptsLeft={otpAttemptsLeft}
+        otpError={otpError}
+        loading={loading}
+        onResend={handleOtpResend}
+        onSubmit={handleOtpSubmit}
+      />
 
-            {/* Modal Description */}
-            <p className="text-[11px] text-off-white-muted leading-relaxed mb-4">
-              A 6-digit OTP code has been sent to <span className="text-accent font-bold">{otpEmail}</span>. Input it below to verify:
-            </p>
-
-            {/* OTP Digit Inputs */}
-            <div className="flex justify-between gap-2.5 mb-5">
-              {otpDigits.map((digit, idx) => (
-                <input
-                  key={idx}
-                  ref={(el) => (otpInputRefs.current[idx] = el)}
-                  type="text"
-                  maxLength={6}
-                  value={digit}
-                  onChange={(e) => handleOtpChange(idx, e.target.value)}
-                  onKeyDown={(e) => handleOtpKeyDown(idx, e)}
-                  onPaste={handleOtpPaste}
-                  className="w-10 h-12 text-center text-lg font-bold bg-darkbg border border-border rounded text-accent focus:border-accent outline-none transition-all"
-                />
-              ))}
-            </div>
-
-            {/* OTP Error message */}
-            {otpError && (
-              <p className="text-[10px] text-red-400 mb-4 bg-red-500/10 border border-red-500/20 p-2.5 rounded">
-                {otpError}
-              </p>
-            )}
-
-            {/* Attempts Alert */}
-            <p className="text-[9px] text-off-white-muted mb-5">
-              Attempts remaining: <span className="text-accent font-bold">{otpAttemptsLeft}</span> / 3 before self-destruction.
-            </p>
-
-            {/* Action buttons */}
-            <div className="flex gap-3">
-              <button
-                type="button"
-                onClick={handleOtpResend}
-                disabled={loading}
-                className="w-1/2 py-2 border border-border hover:border-accent/20 rounded text-xs font-bold uppercase tracking-wider text-off-white-muted hover:text-off-white transition-all"
-              >
-                RESEND_OTP
-              </button>
-              <button
-                type="button"
-                onClick={handleOtpSubmit}
-                disabled={loading || otpAttemptsLeft === 0}
-                className="w-1/2 py-2 rounded bg-accent hover:bg-accent-dim text-darkbg hover:text-off-white font-bold text-xs uppercase tracking-wider transition-all"
-              >
-                {loading ? 'VERIFYING...' : 'VERIFY_OTP'}
-              </button>
-            </div>
-            
-            {/* Cancel fallback */}
-            <div className="mt-4 text-center">
-              <button
-                type="button"
-                onClick={() => setShowOtpModal(false)}
-                className="text-[9px] uppercase tracking-wider text-off-white-muted hover:underline"
-              >
-                Go back to forms
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ========================================================
-          GOOGLE ACCOUNTS SIMULATED CHOOSER OVERLAY
-          ======================================================== */}
-      {showGoogleChooser && (
-        <div className="fixed inset-0 bg-darkbg/85 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="w-full max-w-sm bg-panel border border-border rounded-lg shadow-2xl p-6 glow-accent animate-fade-in font-mono text-off-white">
-            {/* Header */}
-            <div className="flex justify-between items-center border-b border-border pb-3 mb-4">
-              <div className="flex items-center gap-2 text-accent">
-                <Chrome className="w-4 h-4 shrink-0 animate-pulse" />
-                <span className="text-xs font-bold tracking-widest uppercase">Choose Google Account</span>
-              </div>
-              <span className="text-[10px] bg-border px-1.5 py-0.5 rounded text-off-white-muted">
-                SIM_GATEWAY
-              </span>
-            </div>
-
-            <p className="text-[11px] text-off-white-muted leading-relaxed mb-4">
-              Select a Google account to log in to <span className="text-accent font-bold">DailyOS</span>:
-            </p>
-
-            {/* List of Simulated Accounts */}
-            <div className="space-y-2.5 max-h-60 overflow-y-auto mb-4 pr-1">
-              {[
-                { name: 'Aditya Singh', email: 'adityakumar62719@gmail.com', avatar: 'AS' },
-                { name: 'Developer Sandbox', email: 'dev.tester@gmail.com', avatar: 'DS' },
-                { name: 'Test User B', email: 'test.user.b@gmail.com', avatar: 'TB' }
-              ].map((acc) => (
-                <button
-                  key={acc.email}
-                  onClick={() => handleGoogleSimulateSelect(acc.email, acc.name)}
-                  className="w-full p-3 bg-card hover:bg-card/75 border border-border hover:border-accent/40 rounded flex items-center gap-3.5 transition-all text-left group"
-                >
-                  <div className="w-8 h-8 rounded-full bg-accent/15 border border-accent/25 flex items-center justify-center text-accent font-bold text-xs uppercase group-hover:bg-accent group-hover:text-darkbg transition-colors">
-                    {acc.avatar}
-                  </div>
-                  <div className="flex flex-col min-w-0">
-                    <span className="text-xs font-bold text-off-white truncate">{acc.name}</span>
-                    <span className="text-[10px] text-off-white-muted truncate mt-0.5">{acc.email}</span>
-                  </div>
-                </button>
-              ))}
-            </div>
-
-            {/* Collapsible custom account form */}
-            <div className="border-t border-border pt-3 mt-3">
-              {!showCustomSimForm ? (
-                <button
-                  type="button"
-                  onClick={() => setShowCustomSimForm(true)}
-                  className="w-full py-2 border border-border hover:border-accent/20 border-dashed rounded text-[10px] uppercase text-off-white-muted hover:text-accent font-bold text-center transition-all"
-                >
-                  + Use another account
-                </button>
-              ) : (
-                <div className="space-y-3 p-3 bg-card/40 border border-border rounded animate-fade-in">
-                  <span className="text-[10px] uppercase text-accent font-bold">Add Simulated Account</span>
-                  
-                  <div className="space-y-1">
-                    <label className="text-[9px] uppercase tracking-wider text-off-white-muted">Email Address</label>
-                    <input
-                      type="email"
-                      placeholder="e.g. customized@gmail.com"
-                      value={customSimEmail}
-                      onChange={(e) => setCustomSimEmail(e.target.value)}
-                      className="w-full px-2.5 py-1.5 text-[11px] bg-darkbg border border-border rounded text-off-white focus:border-accent outline-none"
-                    />
-                  </div>
-
-                  <div className="space-y-1">
-                    <label className="text-[9px] uppercase tracking-wider text-off-white-muted">Display Name</label>
-                    <input
-                      type="text"
-                      placeholder="e.g. Custom User"
-                      value={customSimName}
-                      onChange={(e) => setCustomSimName(e.target.value)}
-                      className="w-full px-2.5 py-1.5 text-[11px] bg-darkbg border border-border rounded text-off-white focus:border-accent outline-none"
-                    />
-                  </div>
-
-                  <div className="flex gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setShowCustomSimForm(false)}
-                      className="w-1/2 py-1.5 border border-border hover:bg-red-500/10 rounded text-[9px] uppercase font-bold text-off-white-muted hover:text-red-400 transition-all"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const email = customSimEmail.trim();
-                        const name = customSimName.trim() || email.split('@')[0] || 'Custom User';
-                        if (!email.includes('@')) {
-                          alert('Please enter a valid email address.');
-                          return;
-                        }
-                        handleGoogleSimulateSelect(email, name);
-                      }}
-                      className="w-full py-1.5 rounded bg-accent hover:bg-accent-dim text-darkbg hover:text-off-white font-bold text-[9px] uppercase transition-all"
-                    >
-                      Add & Sign In
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Cancel Button */}
-            <div className="mt-4 text-center">
-              <button
-                type="button"
-                onClick={() => setShowGoogleChooser(false)}
-                className="text-[9px] uppercase tracking-wider text-off-white-muted hover:underline"
-              >
-                Go back to login
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Simulated Google Accounts chooser overlay */}
+      <GoogleSimChooser
+        isOpen={showGoogleChooser}
+        onClose={() => setShowGoogleChooser(false)}
+        onSelect={handleGoogleSimulateSelect}
+        customSimEmail={customSimEmail}
+        setCustomSimEmail={setCustomSimEmail}
+        customSimName={customSimName}
+        setCustomSimName={setCustomSimName}
+        showCustomSimForm={showCustomSimForm}
+        setShowCustomSimForm={setShowCustomSimForm}
+      />
     </div>
   );
 };
