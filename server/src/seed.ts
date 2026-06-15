@@ -37,8 +37,11 @@ const cleanDatabase = async () => {
 
     const passwordHash = await bcrypt.hash(DEFAULT_PASS, 10);
     await User.create({
+      name: 'Admin User',
       username: DEFAULT_USER.toLowerCase(),
-      passwordHash,
+      email: 'admin@dailyos.host',
+      password: passwordHash,
+      isVerified: true,
     });
     
     console.log('\n=========================================');
