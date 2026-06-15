@@ -5,15 +5,14 @@ import {
   Sun,
   Moon,
   Plus,
-  Trash2,
   AlertCircle,
   TrendingUp,
   Droplets,
   Zap,
-  CheckCircle,
   Heart,
 } from 'lucide-react';
 import { LoadingSpinner } from '../components/LoadingSpinner';
+import { SkincareStepRow } from '../components/skincare/SkincareStepRow';
 import {
   ResponsiveContainer,
   LineChart as RechartsLineChart,
@@ -201,7 +200,7 @@ export const SkincareTracker: React.FC = () => {
   }
 
   return (
-    <div className="p-6 grid grid-cols-1 xl:grid-cols-12 gap-6 select-none animate-fade-in pb-16 md:pb-6">
+    <div className="p-4 sm:p-6 grid grid-cols-1 xl:grid-cols-12 gap-6 select-none animate-fade-in pb-16 md:pb-6">
       {/* ERROR HEADER */}
       {error && (
         <div className="xl:col-span-12 flex items-center gap-2.5 p-3 bg-red-500/10 border border-red-500/20 text-red-400 text-xs font-mono rounded">
@@ -285,51 +284,15 @@ export const SkincareTracker: React.FC = () => {
                 </div>
               ) : (
                 skincareLog?.amRoutine.map((item, index) => (
-                  <div
+                  <SkincareStepRow
                     key={index}
-                    className={`flex items-center justify-between p-2.5 border rounded transition-all duration-150 font-mono text-xs ${
-                      item.completed
-                        ? 'bg-amber-500/5 border-amber-500/10 text-off-white-muted line-through opacity-70'
-                        : 'bg-card border-border hover:border-amber-500/20'
-                    }`}
-                  >
-                    <div className="flex items-center gap-3 min-w-0 flex-1">
-                      <button
-                        onClick={() => handleToggleAMStep(index)}
-                        className="focus:outline-none transition-transform active:scale-90"
-                      >
-                        {item.completed ? (
-                          <div className="w-4 h-4 rounded bg-amber-500 text-darkbg flex items-center justify-center border border-amber-500 animate-pop">
-                            <CheckCircle className="w-3 h-3 stroke-[3]" />
-                          </div>
-                        ) : (
-                          <div className="w-4 h-4 rounded bg-darkbg border border-border hover:border-amber-500/50 flex items-center justify-center text-transparent hover:text-amber-500 transition-colors">
-                            <CheckCircle className="w-3 h-3" />
-                          </div>
-                        )}
-                      </button>
-
-                      <div className="flex flex-col min-w-0 leading-tight">
-                        <span className="font-bold text-off-white">{item.step}</span>
-                        <input
-                          type="text"
-                          value={item.productName || ''}
-                          placeholder="No product specified..."
-                          onChange={(e) => handleUpdateAMProduct(index, e.target.value)}
-                          className="bg-transparent text-[10px] text-off-white-muted outline-none border-none p-0 mt-0.5 hover:text-off-white focus:text-amber-400 focus:underline tracking-tight truncate w-full"
-                          title="Click to edit product name (auto-saved)"
-                        />
-                      </div>
-                    </div>
-
-                    <button
-                      onClick={() => handleRemoveAMStep(index)}
-                      className="p-1 text-off-white-muted hover:text-red-400 transition-colors rounded shrink-0 ml-2"
-                      title="Remove step"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
+                    item={item}
+                    index={index}
+                    type="am"
+                    onToggle={handleToggleAMStep}
+                    onUpdateProduct={handleUpdateAMProduct}
+                    onRemove={handleRemoveAMStep}
+                  />
                 ))
               )}
             </div>
@@ -383,51 +346,15 @@ export const SkincareTracker: React.FC = () => {
                 </div>
               ) : (
                 skincareLog?.pmRoutine.map((item, index) => (
-                  <div
+                  <SkincareStepRow
                     key={index}
-                    className={`flex items-center justify-between p-2.5 border rounded transition-all duration-150 font-mono text-xs ${
-                      item.completed
-                        ? 'bg-indigo-500/5 border-indigo-500/10 text-off-white-muted line-through opacity-70'
-                        : 'bg-card border-border hover:border-indigo-500/20'
-                    }`}
-                  >
-                    <div className="flex items-center gap-3 min-w-0 flex-1">
-                      <button
-                        onClick={() => handleTogglePMStep(index)}
-                        className="focus:outline-none transition-transform active:scale-90"
-                      >
-                        {item.completed ? (
-                          <div className="w-4 h-4 rounded bg-indigo-500 text-darkbg flex items-center justify-center border border-indigo-500 animate-pop">
-                            <CheckCircle className="w-3 h-3 stroke-[3]" />
-                          </div>
-                        ) : (
-                          <div className="w-4 h-4 rounded bg-darkbg border border-border hover:border-indigo-500/50 flex items-center justify-center text-transparent hover:text-indigo-500 transition-colors">
-                            <CheckCircle className="w-3 h-3" />
-                          </div>
-                        )}
-                      </button>
-
-                      <div className="flex flex-col min-w-0 leading-tight">
-                        <span className="font-bold text-off-white">{item.step}</span>
-                        <input
-                          type="text"
-                          value={item.productName || ''}
-                          placeholder="No product specified..."
-                          onChange={(e) => handleUpdatePMProduct(index, e.target.value)}
-                          className="bg-transparent text-[10px] text-off-white-muted outline-none border-none p-0 mt-0.5 hover:text-off-white focus:text-indigo-400 focus:underline tracking-tight truncate w-full"
-                          title="Click to edit product name (auto-saved)"
-                        />
-                      </div>
-                    </div>
-
-                    <button
-                      onClick={() => handleRemovePMStep(index)}
-                      className="p-1 text-off-white-muted hover:text-red-400 transition-colors rounded shrink-0 ml-2"
-                      title="Remove step"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
+                    item={item}
+                    index={index}
+                    type="pm"
+                    onToggle={handleTogglePMStep}
+                    onUpdateProduct={handleUpdatePMProduct}
+                    onRemove={handleRemovePMStep}
+                  />
                 ))
               )}
             </div>
