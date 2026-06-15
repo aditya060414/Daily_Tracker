@@ -20,7 +20,8 @@ import {
 } from '../types';
 
 const api = axios.create({
-  baseURL: (import.meta as any).env.VITE_API_BASE_URL || '/api/v1',
+  baseURL: (import.meta as any).env.VITE_API_BASE_URL || 
+    ((import.meta as any).env.PROD ? 'https://daily-tracker-1k2n.onrender.com/api/v1' : '/api/v1'),
   headers: {
     'Content-Type': 'application/json',
   },
