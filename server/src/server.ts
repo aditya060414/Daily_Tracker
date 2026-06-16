@@ -37,7 +37,10 @@ app.use(cookieParser());
 const allowedOrigins = [
   'http://localhost:5173', 
   'http://127.0.0.1:5173',
-  'https://daily-tracker-nine-liart.vercel.app'
+  'https://daily-tracker-nine-liart.vercel.app',
+  'capacitor://localhost',
+  'https://localhost',
+  'http://localhost'
 ];
 if (process.env.FRONTEND_URL) {
   const urls = process.env.FRONTEND_URL.split(',').map((url) => url.trim());
