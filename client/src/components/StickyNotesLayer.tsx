@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { Plus, Trash2, CornerDownLeft } from 'lucide-react';
+import { Trash2, CornerDownLeft } from 'lucide-react';
 import { useStickyStore, useAuthStore } from '../store';
 import { StickyNote } from '../types';
 import { nativeConfirm } from '../utils/dialog';
@@ -79,10 +79,10 @@ export const StickyNotesLayer: React.FC = () => {
       {/* GLOBAL ADD BUTTON FAB */}
       <button
         onClick={() => addNote()}
-        className="fixed bottom-[88px] md:bottom-6 right-6 w-11 h-11 bg-accent hover:bg-accent/90 text-off-white rounded-full flex items-center justify-center shadow-lg hover:shadow-xl hover:scale-105 active:scale-95 transition-all pointer-events-auto z-[9999] border border-accent/20 group glow-accent"
+        className="fixed bottom-[88px] md:bottom-6 right-6 w-11 h-11 bg-accent hover:bg-accent/90 text-off-white rounded-full flex items-center justify-center shadow-lg hover:shadow-xl hover:scale-105 active:scale-95 transition-all pointer-events-auto z-[9999] border border-accent/20 group glow-accent font-mono font-bold text-base"
         title="Add Sticky Note"
       >
-        <Plus className="w-5 h-5 transition-transform group-hover:rotate-90 duration-300" />
+        <span className="transition-transform group-hover:scale-110 duration-200">N</span>
       </button>
 
       {/* CONTEXT MENU */}
