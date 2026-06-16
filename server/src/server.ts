@@ -34,7 +34,11 @@ app.use(helmet({
   crossOriginResourcePolicy: { policy: "cross-origin" }
 }));
 app.use(cookieParser());
-const allowedOrigins = ['http://localhost:5173', 'http://127.0.0.1:5173'];
+const allowedOrigins = [
+  'http://localhost:5173', 
+  'http://127.0.0.1:5173',
+  'https://daily-tracker-nine-liart.vercel.app'
+];
 if (process.env.FRONTEND_URL) {
   const urls = process.env.FRONTEND_URL.split(',').map((url) => url.trim());
   allowedOrigins.push(...urls);
