@@ -1,5 +1,5 @@
-import React from 'react';
 import { Chrome } from 'lucide-react';
+import { nativeAlert } from '../../utils/dialog';
 
 interface GoogleSimChooserProps {
   isOpen: boolean;
@@ -117,7 +117,7 @@ export const GoogleSimChooser: React.FC<GoogleSimChooserProps> = ({
                     const email = customSimEmail.trim();
                     const name = customSimName.trim() || email.split('@')[0] || 'Custom User';
                     if (!email.includes('@')) {
-                      alert('Please enter a valid email address.');
+                      nativeAlert('Please enter a valid email address.', 'Invalid Email');
                       return;
                     }
                     onSelect(email, name);

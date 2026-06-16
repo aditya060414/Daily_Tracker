@@ -7,6 +7,12 @@ import { TopBar } from './components/TopBar';
 import { CommandPalette } from './components/CommandPalette';
 import { StickyNotesLayer } from './components/StickyNotesLayer';
 
+// Capacitor Native imports
+import { Capacitor } from '@capacitor/core';
+import { StatusBar, Style } from '@capacitor/status-bar';
+import { App as CapApp } from '@capacitor/app';
+
+
 // Pages
 import { Login } from './pages/Login';
 import { Dashboard } from './pages/Dashboard';
@@ -18,6 +24,7 @@ import { Meals } from './pages/Meals';
 import { DailyReview } from './pages/DailyReview';
 import { Focus } from './pages/Focus';
 import { SkincareTracker } from './pages/SkincareTracker';
+import { Finance } from './pages/Finance';
 
 // Authenticated Route Shell
 const DashboardLayout: React.FC = () => {
@@ -78,6 +85,33 @@ export const App: React.FC = () => {
   const clearAuth = useAuthStore((state) => state.clearAuth);
   const [booting, setBooting] = useState(true);
   const [bootLogs, setBootLogs] = useState<string[]>([]);
+
+  // Native Platform Initialization (StatusBar, Hardware Back Button)
+  useEffect(() => {
+    if (!Capacitor.isNativePlatform()) return;
+
+    // Set StatusBar theme and background color
+    try {
+      StatusBar.setStyle({ style: Style.Dark });
+      StatusBar.setBackgroundColor({ color: '#0f0f0f' });
+    } catch (err) {
+      console.warn('StatusBar plugin error:', err);
+    }
+
+    // Android Hardware Back Button Listener
+    const backButtonListener = CapApp.addListener('backButton', ({ canGoBack }) => {
+      const currentPath = window.location.pathname;
+      if (currentPath === '/' || currentPath === '/login' || !canGoBack) {
+        CapApp.exitApp();
+      } else {
+        window.history.back();
+      }
+    });
+
+    return () => {
+      backButtonListener.then((listener) => listener.remove());
+    };
+  }, []);
 
   useEffect(() => {
     const initAuth = async () => {
@@ -163,6 +197,7 @@ export const App: React.FC = () => {
           <Route path="review" element={<DailyReview />} />
           <Route path="focus" element={<Focus />} />
           <Route path="skincare" element={<SkincareTracker />} />
+          <Route path="finance" element={<Finance />} />
         </Route>
 
         {/* Fallback to root index */}

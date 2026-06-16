@@ -20,6 +20,7 @@ import { useDailyStore, useDateStore } from '../store';
 import { TagChip } from '../components/TagChip';
 import { ConfirmModal } from '../components/ConfirmModal';
 import { LoadingSpinner } from '../components/LoadingSpinner';
+import { nativeAlert } from '../utils/dialog';
 
 const taskTemplateSchema = z.object({
   title: z.string().min(1, 'Task title is required'),
@@ -90,7 +91,7 @@ export const DailyTasks: React.FC = () => {
     let finalCategory = values.category;
     if (values.category === 'custom') {
       if (!customCategoryText.trim()) {
-        alert('Please enter a custom category name');
+        nativeAlert('Please enter a custom category name', 'Validation Error');
         return;
       }
       finalCategory = customCategoryText.trim();
@@ -154,7 +155,7 @@ export const DailyTasks: React.FC = () => {
     let finalCategory = oneOffCategory;
     if (oneOffCategory === 'custom') {
       if (!oneOffCustomText.trim()) {
-        alert('Please enter a custom category name');
+        nativeAlert('Please enter a custom category name', 'Validation Error');
         return;
       }
       finalCategory = oneOffCustomText.trim();

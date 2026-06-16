@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, Sparkles, Dumbbell, Calendar, Target, Utensils, PenLine, LayoutDashboard, CheckSquare, Timer } from 'lucide-react';
+import { Search, Sparkles, Dumbbell, Calendar, Target, Utensils, PenLine, LayoutDashboard, CheckSquare, Timer, Wallet } from 'lucide-react';
 
 interface CommandItem {
   id: string;
@@ -121,6 +121,28 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({ isOpen, onClose 
       icon: <PenLine className="w-4 h-4" />,
       action: () => {
         navigate('/review');
+        onClose();
+      },
+    },
+    {
+      id: 'finance',
+      title: 'Go to Finance Dashboard',
+      subtitle: 'Audit liquid balance, track savings goals, log expenses, and configure budgets',
+      category: 'Navigation',
+      icon: <Wallet className="w-4 h-4" />,
+      action: () => {
+        navigate('/finance');
+        onClose();
+      },
+    },
+    {
+      id: 'quick-expense',
+      title: 'Quick-Add Expense Item',
+      subtitle: 'Record a transaction in the finance ledger immediately',
+      category: 'Actions',
+      icon: <Sparkles className="w-4 h-4 text-accent" />,
+      action: () => {
+        navigate('/finance');
         onClose();
       },
     },

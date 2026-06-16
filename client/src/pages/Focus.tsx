@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState, useMemo } from 'react';
 import { useFocusStore, useDailyStore, useGoalsStore, useDateStore, useAuthStore } from '../store';
 import { Maximize2, Minimize2, LogOut } from 'lucide-react';
+import { nativeAlert } from '../utils/dialog';
 
 // Import subcomponents
 import { ThemeCanvas } from '../components/focus/ThemeCanvas';
@@ -198,7 +199,7 @@ export const Focus: React.FC = () => {
 
   const handleCustomTimeSubmit = () => {
     if (customMin < 1 || customMin > 1440) {
-      alert('Duration must be between 1 and 1440 minutes.');
+      nativeAlert('Duration must be between 1 and 1440 minutes.', 'Invalid Duration');
       return;
     }
     setCustomDuration(customMin * 60);

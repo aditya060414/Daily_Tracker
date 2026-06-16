@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { Plus, Trash2, CornerDownLeft } from 'lucide-react';
 import { useStickyStore, useAuthStore } from '../store';
 import { StickyNote } from '../types';
+import { nativeConfirm } from '../utils/dialog';
 
 // Helper to determine first emoji or capital letter from a note title
 const getDisplayCharacter = (title: string, userInitial: string): string => {
@@ -90,7 +91,8 @@ export const StickyNotesLayer: React.FC = () => {
           menu={contextMenu}
           onClose={() => setContextMenu(null)}
           onDelete={async (id) => {
-            if (confirm('Are you sure you want to delete this sticky note?')) {
+            const confirmed = await nativeConfirm('Are you sure you want to delete this sticky note?', 'Delete Note');
+            if (confirmed) {
               await deleteNote(id);
             }
           }}
@@ -521,7 +523,8 @@ const StickyNoteItem: React.FC<StickyNoteItemProps> = ({
               {/* Delete button */}
               <button
                 onClick={async () => {
-                  if (confirm('Delete this sticky note?')) {
+                  const confirmed = await nativeConfirm('Delete this sticky note?', 'Delete Note');
+                  if (confirmed) {
                     await deleteNote(note._id);
                   }
                 }}

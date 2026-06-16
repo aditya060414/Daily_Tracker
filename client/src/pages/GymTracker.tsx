@@ -24,6 +24,7 @@ import { startOfWeek, endOfWeek, parseISO, format } from 'date-fns';
 import { GymExercise } from '../types';
 import { LoadingSpinner } from '../components/LoadingSpinner';
 import { ExerciseCard } from '../components/gym/ExerciseCard';
+import { nativeConfirm } from '../utils/dialog';
 
 const exerciseSchema = z.object({
   name: z.string().min(1, 'Exercise name is required'),
@@ -163,7 +164,8 @@ export const GymTracker: React.FC = () => {
 
   // Clear / delete session
   const handleDeleteSession = async () => {
-    if (window.confirm('Delete this workout session?')) {
+    const confirmed = await nativeConfirm('Delete this workout session?', 'Delete Session');
+    if (confirmed) {
       await deleteSession(selectedDate);
       setExercises([]);
       setDuration(0);
@@ -178,11 +180,14 @@ export const GymTracker: React.FC = () => {
     .filter((s) => s.date < selectedDate)
     .sort((a, b) => b.date.localeCompare(a.date))[0];
 
-  const handleCopyFromPrevious = () => {
-    if (previousSession && window.confirm('Copy all exercises from previous session to today?')) {
-      setExercises(previousSession.exercises || []);
-      setDuration(previousSession.durationMinutes || 0);
-      setSessionNotes(previousSession.notes || '');
+  const handleCopyFromPrevious = async () => {
+    if (previousSession) {
+      const confirmed = await nativeConfirm('Copy all exercises from previous session to today?', 'Copy Lifts');
+      if (confirmed) {
+        setExercises(previousSession.exercises || []);
+        setDuration(previousSession.durationMinutes || 0);
+        setSessionNotes(previousSession.notes || '');
+      }
     }
   };
 
@@ -638,8 +643,9 @@ export const GymTracker: React.FC = () => {
                                 </div>
                               )}
                               <button
-                                onClick={() => {
-                                  if (window.confirm(`Copy exercises from ${s.date} to today?`)) {
+                                onClick={async () => {
+                                  const confirmed = await nativeConfirm(`Copy exercises from ${s.date} to today?`, 'Use Lifts');
+                                  if (confirmed) {
                                     setExercises(s.exercises || []);
                                     setDuration(s.durationMinutes || 0);
                                     setSessionNotes(s.notes || '');

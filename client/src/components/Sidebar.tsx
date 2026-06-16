@@ -12,6 +12,7 @@ import {
   Terminal,
   Timer,
   Sparkles,
+  Wallet,
 } from 'lucide-react';
 import { useAuthStore } from '../store';
 
@@ -33,6 +34,7 @@ export const Sidebar: React.FC = () => {
     { to: '/focus', label: 'Focus', icon: <Timer className="w-4 h-4" /> },
     { to: '/goals', label: 'Goals', icon: <Target className="w-4 h-4" /> },
     { to: '/meals', label: 'Meals', icon: <Utensils className="w-4 h-4" /> },
+    { to: '/finance', label: 'Finance', icon: <Wallet className="w-4 h-4" /> },
     { to: '/skincare', label: 'Skin Care', icon: <Sparkles className="w-4 h-4" /> },
     { to: '/review', label: 'Review', icon: <PenLine className="w-4 h-4" /> },
   ];
@@ -91,7 +93,7 @@ export const Sidebar: React.FC = () => {
       </aside>
 
       {/* MOBILE BOTTOM TAB BAR: Hidden on desktop (>=768px) */}
-      <aside className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-panel border-t border-border flex items-center justify-start gap-1 overflow-x-auto no-scrollbar py-1.5 px-3">
+      <aside className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-panel border-t border-border flex items-center justify-start gap-1 overflow-x-auto no-scrollbar pt-1.5 pb-[calc(6px+env(safe-area-inset-bottom))] px-3">
         {navItems.map((item) => (
           <NavLink
             key={item.to}

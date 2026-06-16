@@ -113,6 +113,11 @@ export const Dashboard: React.FC<DashboardProps> = ({ onOpenCommandPalette }) =>
 
   const pointsPercentage = dailyPointsTarget > 0 ? (pointsToday / dailyPointsTarget) * 100 : 0;
 
+  // Filter history: Skip leading zero-point days
+  const firstActiveIndex = pointsHistory.findIndex((h) => h.points > 0);
+  const displayHistory = firstActiveIndex !== -1 ? pointsHistory.slice(firstActiveIndex) : [];
+  const hasPointsData = displayHistory.length > 0;
+
   if (dailyLoading && !dailyLog) {
     return <LoadingSpinner message="Initializing workspace telemetry..." />;
   }
@@ -311,9 +316,16 @@ export const Dashboard: React.FC<DashboardProps> = ({ onOpenCommandPalette }) =>
           <div className="h-56 flex items-center justify-center font-mono text-xs text-off-white-muted animate-pulse">
             Retrieving point analytics vectors...
           </div>
-        ) : (
+        ) : hasPointsData ? (
           <div className="mt-4 overflow-hidden">
-            <LineChart data={pointsHistory} color="#7c3aed" height={220} label="Score Points" />
+            <LineChart data={displayHistory} color="#7c3aed" height={220} label="Score Points" />
+          </div>
+        ) : (
+          <div className="h-56 flex flex-col items-center justify-center font-mono text-xs text-off-white-muted border border-dashed border-border/80 rounded bg-card/10 p-4 text-center select-none">
+            <p className="font-bold text-accent mb-1 uppercase tracking-wider">No Productivity Data Recorded</p>
+            <p className="max-w-xs text-[10px]">
+              Complete tasks on your daily checklist, track gym workouts, or complete focus sessions to earn points and activate productivity index tracing.
+            </p>
           </div>
         )}
       </div>

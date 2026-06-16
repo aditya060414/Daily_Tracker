@@ -6,9 +6,9 @@ import { format, addDays, parseISO } from "date-fns";
 import { mealsApi } from "../api";
 import { Meal, MealItem } from "../types";
 
-// Import modular components
 import { MealSection } from "../components/meals/MealSection";
 import { MacroSummaryCard } from "../components/meals/MacroSummaryCard";
+import { nativeAlert } from "../utils/dialog";
 
 const FOOD_DATABASE = [
   { name: "Chicken Breast (Cooked)", calories: 165, protein: 31, carbs: 0, fat: 3.6 },
@@ -68,7 +68,7 @@ export const Meals: React.FC = () => {
 
     const updatedItems = [...existingItems, newItem];
     await saveMeal(selectedDate, targetMealType, updatedItems);
-    alert(`Successfully logged ${newItem.name} to ${targetMealType}!`);
+    nativeAlert(`Successfully logged ${newItem.name} to ${targetMealType}!`, "Meal Logged");
   };
 
   // Local State: Targets

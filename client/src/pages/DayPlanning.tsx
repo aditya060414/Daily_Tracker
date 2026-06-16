@@ -17,6 +17,7 @@ import { useDayPlanStore, useDailyStore, useDateStore } from '../store';
 import { format, addDays, parseISO } from 'date-fns';
 import { TagChip } from '../components/TagChip';
 import { LoadingSpinner } from '../components/LoadingSpinner';
+import { nativeAlert } from '../utils/dialog';
 
 const timeBlockSchema = z
   .object({
@@ -121,7 +122,7 @@ export const DayPlanning: React.FC = () => {
     let finalCategory = values.category;
     if (values.category === 'custom') {
       if (!customCategoryText.trim()) {
-        alert('Please enter a custom category name');
+        nativeAlert('Please enter a custom category name', 'Validation Error');
         return;
       }
       finalCategory = customCategoryText.trim();
