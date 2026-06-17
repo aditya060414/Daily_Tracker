@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
-import { Search, LogOut, ChevronDown } from 'lucide-react';
+import { Search, LogOut, ChevronDown, Bell } from 'lucide-react';
 import { useAuthStore, useDateStore, useDailyStore } from '../store';
 import { authApi } from '../api';
 import { useNavigate } from 'react-router-dom';
 import { PointsBadge } from './PointsBadge';
 import { DateNav } from './DateNav';
+import { Capacitor } from '@capacitor/core';
+import { MobileSettingsModal } from './auth/MobileSettingsModal';
 
 interface TopBarProps {
   onOpenCommandPalette: () => void;
@@ -18,6 +20,7 @@ export const TopBar: React.FC<TopBarProps> = ({ onOpenCommandPalette }) => {
   const navigate = useNavigate();
 
   const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   // Auto greeting based on time of day
   const getGreeting = () => {
@@ -109,6 +112,19 @@ export const TopBar: React.FC<TopBarProps> = ({ onOpenCommandPalette }) => {
                   <span className="text-[9px] text-off-white-muted truncate mt-0.5">{user?.email}</span>
                 </div>
                 
+                {Capacitor.isNativePlatform() && (
+                  <button
+                    onClick={() => {
+                      setSettingsOpen(true);
+                      setDropdownOpen(false);
+                    }}
+                    className="w-full flex items-center gap-2.5 px-2 py-1.5 rounded text-[10px] text-accent hover:bg-accent/10 transition-all text-left uppercase tracking-wider"
+                  >
+                    <Bell className="w-3.5 h-3.5 text-accent" />
+                    <span>MOBILE_ALERTS</span>
+                  </button>
+                )}
+
                 <button
                   onClick={handleLogout}
                   className="w-full flex items-center gap-2.5 px-2 py-1.5 rounded text-[10px] text-red-400 hover:bg-red-500/15 transition-all text-left uppercase tracking-wider"
@@ -121,6 +137,7 @@ export const TopBar: React.FC<TopBarProps> = ({ onOpenCommandPalette }) => {
           )}
         </div>
       </div>
+      <MobileSettingsModal isOpen={settingsOpen} onClose={() => setSettingsOpen(false)} />
     </header>
   );
 };
