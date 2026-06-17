@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
-import { Utensils, Sliders } from "lucide-react";
-import { useMealsStore, useDateStore } from "../store";
+import { Utensils, Sliders, ChevronDown, ChevronUp } from "lucide-react";
+import { useMealsStore, useDateStore, useReferenceStore } from "../store";
 import { LoadingSpinner } from "../components/LoadingSpinner";
 import { format, addDays, parseISO } from "date-fns";
 import { mealsApi } from "../api";
@@ -43,9 +43,43 @@ export const Meals: React.FC = () => {
   const [customFat, setCustomFat] = useState<number>(2);
   const [targetMealType, setTargetMealType] = useState<"breakfast" | "lunch" | "dinner" | "snack">("breakfast");
 
-  const baseFood = selectedFoodIndex === "custom"
+  // Reference Database Search States for Quick Log
+  const [calcSearchQuery, setCalcSearchQuery] = useState("");
+  const [calcDebouncedQuery, setCalcDebouncedQuery] = useState("");
+  const [calcSuggestions, setCalcSuggestions] = useState<any[]>([]);
+  const [selectedReferenceFood, setSelectedReferenceFood] = useState<any | null>(null);
+  const [showCalcMicros, setShowCalcMicros] = useState(false);
+  const [isCustomMode, setIsCustomMode] = useState(false);
+
+  // Debounce the search input for the calculator
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setCalcDebouncedQuery(calcSearchQuery);
+    }, 300);
+    return () => clearTimeout(handler);
+  }, [calcSearchQuery]);
+
+  const searchNutrition = useReferenceStore((state) => state.searchNutrition);
+  const getNutritionById = useReferenceStore((state) => state.getNutritionById);
+
+  // Query search suggestions for the calculator
+  useEffect(() => {
+    if (calcDebouncedQuery.trim().length < 2) {
+      setCalcSuggestions([]);
+      return;
+    }
+    const fetchMatches = async () => {
+      const matches = await searchNutrition(calcDebouncedQuery);
+      setCalcSuggestions(matches.slice(0, 5));
+    };
+    fetchMatches();
+  }, [calcDebouncedQuery, searchNutrition]);
+
+  const baseFood = isCustomMode
     ? { name: customFoodName || "Custom Food", calories: customCal, protein: customProt, carbs: customCarbs, fat: customFat }
-    : FOOD_DATABASE[Number(selectedFoodIndex)];
+    : selectedReferenceFood
+      ? selectedReferenceFood
+      : FOOD_DATABASE[Number(selectedFoodIndex)];
 
   const computedCalories = Math.round(((baseFood?.calories || 0) * weight) / 100);
   const computedProtein = Math.round((((baseFood?.protein || 0) * weight) / 100) * 10) / 10;
@@ -56,10 +90,17 @@ export const Meals: React.FC = () => {
     const mealDoc = meals.find((m) => m.mealType === targetMealType);
     const existingItems = mealDoc?.items || [];
     
+    let loggedName = "";
+    if (isCustomMode) {
+      loggedName = `${customFoodName || "Custom Food"} (${weight}g)`;
+    } else if (selectedReferenceFood) {
+      loggedName = `${selectedReferenceFood.name} (${weight}g)`;
+    } else {
+      loggedName = `${FOOD_DATABASE[Number(selectedFoodIndex)].name} (${weight}g)`;
+    }
+
     const newItem: MealItem = {
-      name: selectedFoodIndex === "custom"
-        ? `${customFoodName || "Custom Food"} (${weight}g)`
-        : `${FOOD_DATABASE[Number(selectedFoodIndex)].name} (${weight}g)`,
+      name: loggedName,
       calories: computedCalories,
       protein: computedProtein,
       carbs: computedCarbs,
@@ -545,32 +586,137 @@ export const Meals: React.FC = () => {
 
         {/* Quick Log Calculator */}
         <div className="bg-panel border border-border rounded-lg p-5 flex flex-col min-h-[220px]">
-          <div className="flex items-center gap-2 border-b border-border pb-3 mb-3">
+          <div className="flex items-center gap-2 border-b border-border pb-3 mb-3 justify-between">
             <span className="font-mono text-xs font-bold uppercase tracking-wider text-off-white">
-              Quick Macro Log Calculator
+              Nutrition Reference & Calculator
             </span>
+            <div className="flex gap-1.5">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsCustomMode(false);
+                  setSelectedReferenceFood(null);
+                  setCalcSearchQuery("");
+                }}
+                className={`px-1.5 py-0.5 border text-[8px] font-bold rounded uppercase transition-colors ${
+                  !isCustomMode && !selectedReferenceFood
+                    ? "bg-accent/20 border-accent text-accent"
+                    : "bg-darkbg border-border text-off-white-muted hover:border-accent/40"
+                }`}
+              >
+                Presets
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsCustomMode(true);
+                  setSelectedReferenceFood(null);
+                }}
+                className={`px-1.5 py-0.5 border text-[8px] font-bold rounded uppercase transition-colors ${
+                  isCustomMode
+                    ? "bg-accent/20 border-accent text-accent"
+                    : "bg-darkbg border-border text-off-white-muted hover:border-accent/40"
+                }`}
+              >
+                Custom
+              </button>
+            </div>
           </div>
 
-          <div className="space-y-3 font-mono text-xs flex-grow flex flex-col justify-between">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <label className="text-[8px] uppercase tracking-wider text-off-white-muted block">
-                  Select Food
+          <div className="space-y-3 font-mono text-xs flex-grow flex flex-col justify-between relative">
+            {/* Search Input for reference database (shown if not custom mode) */}
+            {!isCustomMode && (
+              <div className="space-y-1 relative">
+                <label className="text-[8px] uppercase tracking-wider text-off-white-muted block font-bold">
+                  Search Reference Food Database (2,300+ items)
                 </label>
-                <select
-                  value={selectedFoodIndex}
-                  onChange={(e) => setSelectedFoodIndex(e.target.value)}
-                  className="w-full px-2 py-1.5 bg-darkbg border border-border rounded text-[10px] text-off-white outline-none focus:border-accent font-bold"
-                >
-                  {FOOD_DATABASE.map((food, idx) => (
-                    <option key={idx} value={idx}>
-                      {food.name} ({food.calories} kcal / 100g)
-                    </option>
-                  ))}
-                  <option value="custom">-- CUSTOM_MACROS --</option>
-                </select>
+                <input
+                  type="text"
+                  placeholder="Type to search (e.g. Chicken, Beef, Oats, Apple)..."
+                  value={calcSearchQuery}
+                  onChange={(e) => setCalcSearchQuery(e.target.value)}
+                  className="w-full px-2.5 py-1.5 bg-darkbg border border-border rounded text-xs text-off-white outline-none focus:border-accent font-bold"
+                />
+                
+                {/* Search Autocomplete Suggestions List */}
+                {calcSuggestions.length > 0 && (
+                  <div className="absolute left-0 right-0 mt-1 bg-card border border-border rounded shadow-xl z-50 overflow-hidden font-mono max-h-[160px] overflow-y-auto">
+                    {calcSuggestions.map((food) => (
+                      <button
+                        key={food._id}
+                        type="button"
+                        onClick={async () => {
+                          setSelectedReferenceFood(food);
+                          setCalcSearchQuery(food.name);
+                          setCalcSuggestions([]);
+                          setShowCalcMicros(false);
+                        }}
+                        className="w-full text-left px-2.5 py-1.5 hover:bg-accent/10 border-b border-border/40 last:border-b-0 transition-colors flex justify-between items-center text-[10px] cursor-pointer"
+                      >
+                        <span className="text-off-white font-bold truncate pr-2">{food.name}</span>
+                        <span className="text-accent shrink-0">{food.calories} kcal</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {/* Presets dropdown / Custom Name */}
+              <div className="space-y-1">
+                {isCustomMode ? (
+                  <>
+                    <label className="text-[8px] uppercase tracking-wider text-off-white-muted block">
+                      Custom Food Name
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="Custom"
+                      value={customFoodName}
+                      onChange={(e) => setCustomFoodName(e.target.value)}
+                      className="w-full px-2.5 py-1 bg-darkbg border border-border rounded text-xs text-off-white outline-none focus:border-accent font-bold"
+                    />
+                  </>
+                ) : (
+                  <>
+                    <label className="text-[8px] uppercase tracking-wider text-off-white-muted block">
+                      {selectedReferenceFood ? "Selected Reference" : "Or Select Quick Preset"}
+                    </label>
+                    {selectedReferenceFood ? (
+                      <div className="flex gap-1.5 items-center">
+                        <div className="flex-grow px-2 py-1 bg-accent/10 border border-accent/25 rounded text-[10px] text-accent font-bold truncate">
+                          {selectedReferenceFood.name}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedReferenceFood(null);
+                            setCalcSearchQuery("");
+                          }}
+                          className="px-2 py-1 bg-darkbg border border-border rounded text-[9px] font-bold text-red-400 hover:border-red-500/40 hover:text-red-300 transition-colors shrink-0"
+                        >
+                          Clear
+                        </button>
+                      </div>
+                    ) : (
+                      <select
+                        value={selectedFoodIndex}
+                        onChange={(e) => setSelectedFoodIndex(e.target.value)}
+                        className="w-full px-2 py-1 bg-darkbg border border-border rounded text-[10px] text-off-white outline-none focus:border-accent font-bold"
+                      >
+                        {FOOD_DATABASE.map((food, idx) => (
+                          <option key={idx} value={idx}>
+                            {food.name} ({food.calories} kcal / 100g)
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                  </>
+                )}
               </div>
 
+              {/* Weight in grams */}
               <div className="space-y-1">
                 <label className="text-[8px] uppercase tracking-wider text-off-white-muted block">
                   Weight (g)
@@ -584,20 +730,9 @@ export const Meals: React.FC = () => {
               </div>
             </div>
 
-            {selectedFoodIndex === "custom" && (
-              <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 p-2.5 bg-card border border-border rounded animate-fade-in">
-                <div className="col-span-2 sm:col-span-1 space-y-1">
-                  <label className="text-[8px] uppercase text-off-white-muted">
-                    Name
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="Custom"
-                    value={customFoodName}
-                    onChange={(e) => setCustomFoodName(e.target.value)}
-                    className="w-full px-1.5 py-0.5 bg-darkbg border border-border rounded text-[10px] text-off-white outline-none"
-                  />
-                </div>
+            {/* Custom Entry Fields (if in custom mode) */}
+            {isCustomMode && (
+              <div className="grid grid-cols-4 gap-2 p-2.5 bg-card border border-border rounded animate-fade-in">
                 <div className="space-y-1">
                   <label className="text-[8px] uppercase text-off-white-muted">
                     Kcal
@@ -611,7 +746,7 @@ export const Meals: React.FC = () => {
                 </div>
                 <div className="space-y-1">
                   <label className="text-[8px] uppercase text-off-white-muted">
-                    Prot
+                    Prot (g)
                   </label>
                   <input
                     type="number"
@@ -622,7 +757,7 @@ export const Meals: React.FC = () => {
                 </div>
                 <div className="space-y-1">
                   <label className="text-[8px] uppercase text-off-white-muted">
-                    Carbs
+                    Carbs (g)
                   </label>
                   <input
                     type="number"
@@ -633,7 +768,7 @@ export const Meals: React.FC = () => {
                 </div>
                 <div className="space-y-1">
                   <label className="text-[8px] uppercase text-off-white-muted">
-                    Fat
+                    Fat (g)
                   </label>
                   <input
                     type="number"
@@ -641,6 +776,60 @@ export const Meals: React.FC = () => {
                     onChange={(e) => setCustomFat(Number(e.target.value) || 0)}
                     className="w-full px-1.5 py-0.5 bg-darkbg border border-border rounded text-[10px] text-off-white outline-none"
                   />
+                </div>
+              </div>
+            )}
+
+            {/* Reference Nutrition Details Tray (shown when selectedReferenceFood is set) */}
+            {selectedReferenceFood && (
+              <div className="p-2.5 bg-card/60 border border-border rounded space-y-2 text-[10px]">
+                <div className="flex justify-between items-center text-[9px] border-b border-border/40 pb-1">
+                  <span className="font-bold text-accent uppercase">Reference Values (Per 100g)</span>
+                  <span className="text-off-white-muted uppercase">Serving: {selectedReferenceFood.servingSize || "100g"}</span>
+                </div>
+                <div className="flex flex-col">
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      if (!selectedReferenceFood.micronutrients && !showCalcMicros) {
+                        // Fetch detailed document with micronutrients if not present
+                        const fullItem = await getNutritionById(selectedReferenceFood._id);
+                        if (fullItem) {
+                          setSelectedReferenceFood(fullItem);
+                        }
+                      }
+                      setShowCalcMicros(!showCalcMicros);
+                    }}
+                    className="w-fit text-accent hover:text-accent-dim uppercase font-bold text-[8px] tracking-wider transition-all flex items-center gap-0.5 cursor-pointer underline"
+                  >
+                    {showCalcMicros ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                    <span>{showCalcMicros ? "Hide full nutrition details" : "Check detailed nutrition values"}</span>
+                  </button>
+
+                  {showCalcMicros && (
+                    <div className="mt-2 pt-2 border-t border-border/40 space-y-1 text-[8px] text-off-white-muted max-h-[120px] overflow-y-auto pr-1">
+                      {selectedReferenceFood.fiber !== undefined && (
+                        <div className="flex justify-between"><span>Dietary Fiber:</span> <span className="text-off-white font-bold">{selectedReferenceFood.fiber}g</span></div>
+                      )}
+                      {selectedReferenceFood.sugar !== undefined && (
+                        <div className="flex justify-between"><span>Sugars:</span> <span className="text-off-white font-bold">{selectedReferenceFood.sugar}g</span></div>
+                      )}
+                      {selectedReferenceFood.sodium !== undefined && (
+                        <div className="flex justify-between"><span>Sodium:</span> <span className="text-off-white font-bold">{selectedReferenceFood.sodium}mg</span></div>
+                      )}
+                      {selectedReferenceFood.micronutrients && Object.entries(selectedReferenceFood.micronutrients).map(([key, val]) => {
+                        if (Number(val) > 0) {
+                          return (
+                            <div key={key} className="flex justify-between">
+                              <span className="capitalize">{key}:</span>
+                              <span className="text-off-white font-bold">{val as any}</span>
+                            </div>
+                          );
+                        }
+                        return null;
+                      })}
+                    </div>
+                  )}
                 </div>
               </div>
             )}
