@@ -185,11 +185,12 @@ export const gymApi = {
   },
   upsert: async (
     date: string,
-    data: { exercises: GymExercise[]; durationMinutes: number; notes: string; photos?: string[] }
+    data: { exercises: GymExercise[]; durationMinutes: number; notes: string; photos?: string[]; split?: string; bodyWeight?: number }
   ) => {
     const res = await api.put<ApiResponse<GymSession>>(`/gym/${date}`, data);
     return res.data;
   },
+
   delete: async (date: string) => {
     const res = await api.delete<ApiResponse<{ date: string }>>(`/gym/${date}`);
     return res.data;
@@ -351,3 +352,23 @@ export const focusApi = {
     return res.data;
   },
 };
+
+export const referenceApi = {
+  searchNutrition: async (query: string, full?: boolean) => {
+    const res = await api.get<ApiResponse<any[]>>('/reference/nutrition/search', {
+      params: { q: query, full: full ? 'true' : 'false' },
+    });
+    return res.data;
+  },
+  getNutritionById: async (id: string) => {
+    const res = await api.get<ApiResponse<any>>(`/reference/nutrition/${id}`);
+    return res.data;
+  },
+  searchExercises: async (bodyPart: string) => {
+    const res = await api.get<ApiResponse<Record<string, any[]>>>('/reference/exercises/search', {
+      params: { bodyPart },
+    });
+    return res.data;
+  },
+};
+
