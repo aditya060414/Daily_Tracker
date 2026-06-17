@@ -17,3 +17,7 @@ build/
 .idea/
 .DS_Store
 Thumbs.db
+
+# Raw reference datasets (used for local DB seeding only)
+FINAL FOOD DATASET/
+exercisedb_v1_sample/
