@@ -120,3 +120,18 @@ By default, Android and iOS native WebViews block all cleartext HTTP traffic (re
 ### Fix
 1. Updated [mobile/android/app/src/main/AndroidManifest.xml](file:///c:/coding/Web%20Development/FULL%20STACK/Project/MERN/fitness/mobile/android/app/src/main/AndroidManifest.xml) to set `android:usesCleartextTraffic="true"` in the `<application>` tag.
 2. Updated [mobile/ios/App/App/Info.plist](file:///c:/coding/Web%20Development/FULL%20STACK/Project/MERN/fitness/mobile/ios/App/App/Info.plist) to include the `NSAppTransportSecurity` / `NSAllowsArbitraryLoads` keys.
+
+---
+
+## 8. Mobile System Notifications (Interval Alerts & Persistent Progress Tracker)
+### Problem
+Users need a way to stay updated on their remaining daily tasks directly from the native device interface without launching the application, and they require periodic reminders to log their activities.
+
+### Fix
+1. Installed the `@capacitor/local-notifications` plugin in `/client` and `/mobile` wrappers.
+2. Added the `<uses-permission android:name="android.permission.POST_NOTIFICATIONS" />` permission to AndroidManifest.xml for Android 13+ support.
+3. Created a notification manager utility at `client/src/utils/notifications.ts` that configures two notification channels:
+   * **`silent_progress` (ID 9999)**: An ongoing/persistent status bar notification showing `X/Y tasks completed (Z%)` that can be toggled by the user. It updates automatically in real-time on any task tick-off.
+   * **`reminders` (ID 8888)**: A recurring reminder alert that can be scheduled at custom intervals (minute/hour/day).
+4. Stored notification preferences inside the Zustand `useAuthStore` with local storage persistence.
+5. Added a terminal-themed `MobileSettingsModal.tsx` settings gateway accessible via the profile dropdown on mobile platforms to customize alert parameters.
