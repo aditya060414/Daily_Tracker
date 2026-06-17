@@ -7,7 +7,8 @@
     "build": "tsc",
     "start": "node dist/server.js",
     "dev": "ts-node-dev --respawn --transpile-only src/server.ts",
-    "seed": "ts-node-dev src/seed.ts"
+    "seed": "ts-node-dev src/seed.ts",
+    "seed-reference": "ts-node scripts/seedReferenceData.ts"
   },
   "dependencies": {
     "amqplib": "^2.0.1",
