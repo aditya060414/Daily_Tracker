@@ -40,6 +40,12 @@ interface AuthState {
   isAuthenticated: boolean;
   setAuth: (token: string, user: User) => void;
   clearAuth: () => void;
+  notificationPrefs: {
+    intervalEnabled: boolean;
+    intervalHours: number;
+    persistentEnabled: boolean;
+  };
+  setNotificationPrefs: (prefs: Partial<AuthState['notificationPrefs']>) => void;
 }
 
 export const useAuthStore = create<AuthState>()(
@@ -48,6 +54,11 @@ export const useAuthStore = create<AuthState>()(
       token: null,
       user: null,
       isAuthenticated: false,
+      notificationPrefs: {
+        intervalEnabled: false,
+        intervalHours: 4,
+        persistentEnabled: false,
+      },
       setAuth: (token, user) => {
         // Support backward compatibility with existing views that reference user.username
         const mappedUser = {
@@ -57,6 +68,9 @@ export const useAuthStore = create<AuthState>()(
         set({ token, user: mappedUser, isAuthenticated: true });
       },
       clearAuth: () => set({ token: null, user: null, isAuthenticated: false }),
+      setNotificationPrefs: (prefs) => set((state) => ({
+        notificationPrefs: { ...state.notificationPrefs, ...prefs }
+      })),
     }),
     {
       name: 'dailyos-auth',
@@ -238,7 +252,7 @@ interface GymState {
   fetchHistorySessions: () => Promise<void>;
   saveSession: (
     date: string,
-    data: { exercises: GymExercise[]; durationMinutes: number; notes: string; photos?: string[] }
+    data: { exercises: GymExercise[]; durationMinutes: number; notes: string; photos?: string[]; split?: string; bodyWeight?: number }
   ) => Promise<void>;
   deleteSession: (date: string) => Promise<void>;
 }
@@ -1027,4 +1041,7 @@ export const useSkincareStore = create<SkincareState>((set, get) => ({
     }
   },
 }));
+
+export * from './referenceStore';
+
 
