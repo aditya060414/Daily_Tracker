@@ -9,8 +9,6 @@ import {
   Plus,
   Save,
   Flame,
-  Award,
-  PieChart,
   Camera,
   Upload,
   X,
@@ -18,12 +16,15 @@ import {
   ChevronDown,
   ChevronUp,
   Copy,
+  Sparkles,
 } from 'lucide-react';
-import { useGymStore, useDateStore } from '../store';
+import { useGymStore, useDateStore, useReferenceStore } from '../store';
 import { startOfWeek, endOfWeek, parseISO, format } from 'date-fns';
-import { GymExercise } from '../types';
+import { GymExercise, GymSet } from '../types';
 import { LoadingSpinner } from '../components/LoadingSpinner';
 import { ExerciseCard } from '../components/gym/ExerciseCard';
+import { LazyGif } from '../components/gym/LazyGif';
+import { GymAnalyticsCharts } from '../components/gym/GymAnalyticsCharts';
 import { nativeConfirm } from '../utils/dialog';
 
 const exerciseSchema = z.object({
@@ -37,13 +38,14 @@ const exerciseSchema = z.object({
 
 type ExerciseFormValues = z.infer<typeof exerciseSchema>;
 
+const COMMON_SPLITS = ['Push', 'Pull', 'Legs', 'Upper', 'Lower', 'Full Body', 'Rest'];
+
 export const GymTracker: React.FC = () => {
   const selectedDate = useDateStore((state) => state.selectedDate);
 
   // Zustand Store
   const {
     session,
-    weeklySessions,
     historySessions,
     loading,
     fetchSession,
@@ -61,6 +63,16 @@ export const GymTracker: React.FC = () => {
   const [photos, setPhotos] = useState<string[]>([]);
   const [activePhoto, setActivePhoto] = useState<string | null>(null);
   const [compressing, setCompressing] = useState(false);
+
+  // New Fields: Split & Body Weight
+  const [split, setSplit] = useState<string>('');
+  const [bodyWeight, setBodyWeight] = useState<number | ''>('');
+
+  // Search Suggestions State
+  const [bodyPartQuery, setBodyPartQuery] = useState('');
+  const [debouncedBodyPartQuery, setDebouncedBodyPartQuery] = useState('');
+  const [exerciseSuggestions, setExerciseSuggestions] = useState<Record<string, any[]>>({});
+  const [selectedExerciseRef, setSelectedExerciseRef] = useState<any | null>(null);
 
   // History expansion toggles
   const [showFullHistory, setShowFullHistory] = useState(false);
@@ -82,6 +94,7 @@ export const GymTracker: React.FC = () => {
     register,
     handleSubmit,
     reset,
+    setValue,
     formState: { errors },
   } = useForm<ExerciseFormValues>({
     resolver: zodResolver(exerciseSchema),
@@ -114,42 +127,142 @@ export const GymTracker: React.FC = () => {
       setDuration(session.durationMinutes || 0);
       setSessionNotes(session.notes || '');
       setPhotos(session.photos || []);
+      setSplit(session.split || '');
+      setBodyWeight(session.bodyWeight || '');
     } else {
       setExercises([]);
       setDuration(0);
       setSessionNotes('');
       setPhotos([]);
+      setSplit('');
+      setBodyWeight('');
     }
   }, [session]);
 
+  // Debounce exercise search query
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedBodyPartQuery(bodyPartQuery);
+    }, 300);
+    return () => clearTimeout(handler);
+  }, [bodyPartQuery]);
+
+  // Query exercise dataset matching body part query
+  const searchExercises = useReferenceStore((state) => state.searchExercises);
+  useEffect(() => {
+    if (debouncedBodyPartQuery.trim().length < 2) {
+      setExerciseSuggestions({});
+      return;
+    }
+    const fetchMatches = async () => {
+      const results = await searchExercises(debouncedBodyPartQuery);
+      setExerciseSuggestions(results);
+    };
+    fetchMatches();
+  }, [debouncedBodyPartQuery, searchExercises]);
+
   // Add exercise to local list
   const onAddExercise = (values: ExerciseFormValues) => {
+    // Generate initial structured sets array
+    const defaultSets: GymSet[] = Array.from({ length: Number(values.sets || 3) }, () => ({
+      weight: Number(values.weight) || undefined,
+      reps: Number(values.reps) || undefined,
+      feel: '',
+    }));
+
+    // Attach reference dataset details if exercise names match
+    const hasRefMatch = selectedExerciseRef && selectedExerciseRef.name.toLowerCase() === values.name.toLowerCase();
+
     setExercises((prev) => [
       ...prev,
       {
         name: values.name,
-        sets: Number(values.sets),
-        reps: Number(values.reps),
-        weight: Number(values.weight),
+        sets: defaultSets,
         unit: values.unit,
         notes: values.notes || '',
+        gifUrl: hasRefMatch ? selectedExerciseRef.gifUrl : undefined,
+        bodyPart: hasRefMatch ? selectedExerciseRef.bodyPart : undefined,
       },
     ]);
     reset({ name: '', sets: 3, reps: 10, weight: 60, unit: 'kg', notes: '' });
+    setSelectedExerciseRef(null);
   };
 
-  // Remove exercise from local list
+  // Editable card handlers passed down
+  const handleUpdateSet = (exerciseIdx: number, setIdx: number, fields: Partial<GymSet>) => {
+    setExercises((prev) =>
+      prev.map((ex, idx) => {
+        if (idx === exerciseIdx) {
+          const newSets = ex.sets.map((set, sIdx) =>
+            sIdx === setIdx ? { ...set, ...fields } : set
+          );
+          return { ...ex, sets: newSets };
+        }
+        return ex;
+      })
+    );
+  };
+
+  const handleAddSet = (exerciseIdx: number) => {
+    setExercises((prev) =>
+      prev.map((ex, idx) => {
+        if (idx === exerciseIdx) {
+          // Carry over last set details as starting template to make input convenient
+          const lastSet = ex.sets[ex.sets.length - 1];
+          return {
+            ...ex,
+            sets: [
+              ...ex.sets,
+              {
+                weight: lastSet?.weight,
+                reps: lastSet?.reps,
+                feel: '',
+              },
+            ],
+          };
+        }
+        return ex;
+      })
+    );
+  };
+
+  const handleRemoveSet = (exerciseIdx: number, setIdx: number) => {
+    setExercises((prev) =>
+      prev.map((ex, idx) => {
+        if (idx === exerciseIdx) {
+          return {
+            ...ex,
+            sets: ex.sets.filter((_, sIdx) => sIdx !== setIdx),
+          };
+        }
+        return ex;
+      })
+    );
+  };
+
+  const handleUpdateNotes = (exerciseIdx: number, notes: string) => {
+    setExercises((prev) =>
+      prev.map((ex, idx) => (idx === exerciseIdx ? { ...ex, notes } : ex))
+    );
+  };
+
   const handleRemoveExercise = (idx: number) => {
     setExercises((prev) => prev.filter((_, i) => i !== idx));
   };
 
   // Submit complete session to DB
   const handleSaveSession = async () => {
+    // Treat exercises with zero sets as a no-op / filter them out
+    const validExercises = exercises.filter((ex) => ex.sets && ex.sets.length > 0);
+
+    // Save session payload
     await saveSession(selectedDate, {
-      exercises,
+      exercises: validExercises,
       durationMinutes: Number(duration) || 0,
       notes: sessionNotes,
       photos,
+      split: split.trim() || undefined,
+      bodyWeight: bodyWeight === '' ? undefined : Number(bodyWeight),
     });
     setSaveSuccess(true);
     setTimeout(() => setSaveSuccess(false), 2000);
@@ -171,6 +284,8 @@ export const GymTracker: React.FC = () => {
       setDuration(0);
       setSessionNotes('');
       setPhotos([]);
+      setSplit('');
+      setBodyWeight('');
       fetchHistorySessions();
     }
   };
@@ -187,11 +302,13 @@ export const GymTracker: React.FC = () => {
         setExercises(previousSession.exercises || []);
         setDuration(previousSession.durationMinutes || 0);
         setSessionNotes(previousSession.notes || '');
+        setSplit(previousSession.split || '');
+        setBodyWeight(previousSession.bodyWeight || '');
       }
     }
   };
 
-  // Compress & Upload Photo client-side
+  // Photo compression utility
   const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
@@ -204,7 +321,7 @@ export const GymTracker: React.FC = () => {
       const img = new Image();
       img.onload = () => {
         const canvas = document.createElement('canvas');
-        const maxDim = 800; // Resize image bounds to keep database lightweight
+        const maxDim = 800;
         let width = img.width;
         let height = img.height;
 
@@ -240,46 +357,7 @@ export const GymTracker: React.FC = () => {
     setPhotos((prev) => prev.filter((_, i) => i !== idx));
   };
 
-  // Analytics Math: Muscle Group Auto-Mapping
-  const mapMuscleGroup = (exerciseName: string): string => {
-    const name = exerciseName.toLowerCase();
-    if (name.includes('bench') || name.includes('chest') || name.includes('fly') || name.includes('pushup')) {
-      return 'Chest';
-    }
-    if (name.includes('squat') || name.includes('leg') || name.includes('calf') || name.includes('hamstring') || name.includes('quad') || name.includes('lunge')) {
-      return 'Legs';
-    }
-    if (name.includes('pullup') || name.includes('row') || name.includes('lat') || name.includes('deadlift') || name.includes('back')) {
-      return 'Back';
-    }
-    if (name.includes('press') || name.includes('lateral') || name.includes('raise') || name.includes('shoulder')) {
-      return 'Shoulders';
-    }
-    if (name.includes('curl') || name.includes('tricep') || name.includes('bicep') || name.includes('arm') || name.includes('extension')) {
-      return 'Arms';
-    }
-    if (name.includes('crunch') || name.includes('plank') || name.includes('abs') || name.includes('situp') || name.includes('core')) {
-      return 'Core';
-    }
-    return 'Other';
-  };
 
-  // Compute Volume & Frequencies for the week
-  const gymSessionsThisWeekCount = weeklySessions.length;
-  let weeklyVolumeKg = 0;
-  const muscleGroupFrequencies: Record<string, number> = {};
-
-  weeklySessions.forEach((s) => {
-    s.exercises.forEach((ex) => {
-      // Calculate volume converting lbs to kg for consistency (1 kg = 2.20462 lbs)
-      const weightInKg = ex.unit === 'lbs' ? ex.weight / 2.20462 : ex.weight;
-      weeklyVolumeKg += ex.sets * ex.reps * weightInKg;
-
-      // Group muscles
-      const group = mapMuscleGroup(ex.name);
-      muscleGroupFrequencies[group] = (muscleGroupFrequencies[group] || 0) + ex.sets;
-    });
-  });
 
   if (loading && !session) {
     return <LoadingSpinner message="Reconstructing gym training matrices..." />;
@@ -290,13 +368,13 @@ export const GymTracker: React.FC = () => {
       {/* LEFT COLUMN: Active Gym Sheet (7 cols) */}
       <div className="xl:col-span-8 space-y-6">
         {/* Workout header controls */}
-        <div className="bg-panel border border-border rounded-lg p-5">
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 border-b border-border pb-4 mb-4">
+        <div className="bg-panel border border-border rounded-lg p-5 space-y-5">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 border-b border-border pb-4">
             <div className="flex items-center gap-2">
               <Dumbbell className="w-5 h-5 text-accent animate-bounce" />
               <h2 className="font-mono text-sm font-bold text-off-white">WORKOUT_LOGGER</h2>
             </div>
-            
+
             <div className="flex gap-2">
               {exercises.length > 0 && (
                 <button
@@ -326,12 +404,12 @@ export const GymTracker: React.FC = () => {
             </div>
           </div>
 
-          {/* Personal Mantra / Daily Target Banner */}
-          <div className="mb-5 p-3.5 bg-card/60 border border-border/80 rounded space-y-1.5 font-mono animate-fade-in">
+          {/* Personal Mantra Banner */}
+          <div className="p-3.5 bg-card/60 border border-border/80 rounded space-y-1.5 font-mono animate-fade-in">
             <span className="text-[9px] uppercase tracking-wider text-off-white-muted block">
               Personal Mantra / Daily Target
             </span>
-            
+
             {isEditingMantra ? (
               <div className="flex gap-2">
                 <input
@@ -342,13 +420,13 @@ export const GymTracker: React.FC = () => {
                   onKeyDown={(e) => {
                     if (e.key === 'Enter') handleSaveMantra();
                   }}
-                  placeholder="Set today's fitness mantra / target (e.g. 'Pushing for 100kg Bench!')"
+                  placeholder="Set today's fitness mantra / target"
                   className="flex-1 px-3 py-1.5 bg-darkbg border border-accent rounded text-off-white text-xs outline-none focus:ring-1 focus:ring-accent"
                   autoFocus
                 />
                 <button
                   onClick={handleSaveMantra}
-                  className="px-3 py-1.5 bg-accent text-darkbg font-bold rounded text-[10px] hover:bg-accent-dim hover:text-off-white transition-all uppercase tracking-wider shadow-[0_0_10px_rgba(124,58,237,0.4)]"
+                  className="px-3 py-1.5 bg-accent text-darkbg font-bold rounded text-[10px] hover:bg-accent-dim hover:text-off-white transition-all uppercase tracking-wider"
                 >
                   Save
                 </button>
@@ -357,20 +435,18 @@ export const GymTracker: React.FC = () => {
               <div
                 onClick={() => setIsEditingMantra(true)}
                 className="flex items-center justify-between p-3.5 rounded bg-darkbg/45 hover:bg-darkbg/85 border border-border/60 hover:border-accent/45 cursor-pointer group transition-all duration-200"
-                title="Click to edit personal mantra"
               >
                 <div className="flex items-center gap-3 min-w-0 flex-1">
-                  <div className="flex-shrink-0 w-7 h-7 rounded-full bg-accent/10 border border-accent/20 flex items-center justify-center group-hover:border-accent/40 transition-colors">
+                  <div className="flex-shrink-0 w-7 h-7 rounded-full bg-accent/10 border border-accent/20 flex items-center justify-center">
                     <Flame className="w-4 h-4 text-accent animate-pulse" />
                   </div>
                   <div className="min-w-0 flex-1">
-                    <p className="text-sm font-bold text-transparent bg-clip-text bg-gradient-to-r from-accent via-purple-300 to-accent tracking-wide font-mono drop-shadow-[0_0_8px_rgba(124,58,237,0.55)] break-words py-0.5">
+                    <p className="text-sm font-bold text-transparent bg-clip-text bg-gradient-to-r from-accent via-purple-300 to-accent tracking-wide font-mono break-words">
                       "{mantraValue}"
                     </p>
                   </div>
                 </div>
-                
-                <span className="text-[9px] font-mono font-bold text-accent border border-accent/20 bg-accent/5 px-2 py-0.5 rounded opacity-0 group-hover:opacity-100 group-hover:bg-accent group-hover:text-darkbg transition-all duration-150 ml-2 shrink-0">
+                <span className="text-[9px] font-mono font-bold text-accent border border-accent/20 bg-accent/5 px-2 py-0.5 rounded opacity-0 group-hover:opacity-100 group-hover:bg-accent group-hover:text-darkbg transition-all ml-2 shrink-0">
                   EDIT
                 </span>
               </div>
@@ -378,7 +454,6 @@ export const GymTracker: React.FC = () => {
               <div
                 onClick={() => setIsEditingMantra(true)}
                 className="flex items-center justify-between p-3.5 rounded bg-darkbg/40 hover:bg-darkbg/70 cursor-pointer border border-dashed border-border hover:border-accent/40 group transition-all duration-200"
-                title="Click to set personal mantra"
               >
                 <div className="flex items-center gap-2">
                   <Plus className="w-4 h-4 text-off-white-muted group-hover:text-accent transition-colors" />
@@ -393,8 +468,41 @@ export const GymTracker: React.FC = () => {
             )}
           </div>
 
-          {/* Session Metadata fields: Duration + Notes */}
-          <div className="grid grid-cols-1 sm:grid-cols-12 gap-4 mb-6">
+          {/* Workout Split Selector */}
+          <div className="p-3.5 bg-card/40 border border-border/70 rounded space-y-2 font-mono">
+            <span className="text-[9px] uppercase tracking-wider text-off-white-muted block">
+              Workout Split / Day Category
+            </span>
+            <div className="flex flex-wrap gap-1.5">
+              {COMMON_SPLITS.map((s) => {
+                const isActive = split === s;
+                return (
+                  <button
+                    key={s}
+                    type="button"
+                    onClick={() => setSplit(isActive ? '' : s)}
+                    className={`px-2 py-1 border text-[9px] font-bold uppercase rounded transition-colors ${
+                      isActive
+                        ? 'bg-accent/20 border-accent text-accent'
+                        : 'bg-darkbg border-border text-off-white-muted hover:border-accent/40'
+                    }`}
+                  >
+                    {s}
+                  </button>
+                );
+              })}
+            </div>
+            <input
+              type="text"
+              placeholder="Custom split name (e.g. Arms + Core)"
+              value={split}
+              onChange={(e) => setSplit(e.target.value)}
+              className="w-full px-3 py-1.5 bg-darkbg border border-border rounded text-off-white outline-none focus:border-accent text-xs"
+            />
+          </div>
+
+          {/* Session Metadata fields: Duration + Body Weight + Notes */}
+          <div className="grid grid-cols-1 sm:grid-cols-12 gap-4">
             <div className="sm:col-span-3 space-y-1">
               <label className="text-[10px] font-mono text-off-white-muted uppercase tracking-wider flex items-center gap-1">
                 <Clock className="w-3 h-3 text-accent" /> Duration (mins)
@@ -407,14 +515,29 @@ export const GymTracker: React.FC = () => {
                 onChange={(e) => setDuration(Number(e.target.value))}
               />
             </div>
-            
-            <div className="sm:col-span-9 space-y-1">
+
+            <div className="sm:col-span-3 space-y-1">
+              <label className="text-[10px] font-mono text-off-white-muted uppercase tracking-wider flex items-center gap-1">
+                <Dumbbell className="w-3 h-3 text-accent" /> Body Weight (kg)
+              </label>
+              <input
+                type="number"
+                min="0"
+                step="any"
+                placeholder="e.g. 75.5"
+                className="w-full px-3 py-2 bg-darkbg border border-border rounded text-off-white outline-none focus:border-accent text-xs font-mono"
+                value={bodyWeight}
+                onChange={(e) => setBodyWeight(e.target.value === '' ? '' : Number(e.target.value))}
+              />
+            </div>
+
+            <div className="sm:col-span-6 space-y-1">
               <label className="text-[10px] font-mono text-off-white-muted uppercase tracking-wider flex items-center gap-1">
                 <Notebook className="w-3 h-3 text-accent" /> Workout / Session Notes
               </label>
               <input
                 type="text"
-                placeholder="Felt strong, squatted deep, warm up took 10 mins..."
+                placeholder="Felt strong, squatted deep..."
                 className="w-full px-3 py-2 bg-darkbg border border-border rounded text-off-white outline-none focus:border-accent text-xs font-mono"
                 value={sessionNotes}
                 onChange={(e) => setSessionNotes(e.target.value)}
@@ -422,8 +545,94 @@ export const GymTracker: React.FC = () => {
             </div>
           </div>
 
-          {/* Inline Add Exercise Form */}
-          <form onSubmit={handleSubmit(onAddExercise)} className="p-4 bg-card border border-border rounded space-y-3 font-mono text-xs mb-6">
+          {/* Reference Movement Lookup Box */}
+          <div className="p-4 bg-card border border-border rounded space-y-3 font-mono text-xs">
+            <div className="flex items-center gap-2 text-accent font-bold uppercase tracking-wider text-[10px]">
+              <Sparkles className="w-3.5 h-3.5 animate-spin" style={{ animationDuration: '4s' }} />
+              <span>Search Movements by Body Part</span>
+            </div>
+
+            <div className="relative">
+              <input
+                type="text"
+                placeholder="Type body part (e.g. chest, legs, shoulders, back...)"
+                value={bodyPartQuery}
+                onChange={(e) => setBodyPartQuery(e.target.value)}
+                className="w-full px-3 py-2 bg-darkbg border border-border rounded text-off-white outline-none focus:border-accent text-xs"
+              />
+            </div>
+
+            {Object.keys(exerciseSuggestions).length > 0 && (
+              <div className="mt-3 bg-darkbg border border-border/80 rounded p-3 space-y-4 max-h-[300px] overflow-y-auto pr-1">
+                {Object.entries(exerciseSuggestions).map(([muscle, items]) => (
+                  <div key={muscle} className="space-y-2">
+                    <h5 className="text-[9px] font-bold text-accent uppercase tracking-wider border-b border-border/40 pb-0.5">
+                      {muscle}
+                    </h5>
+                    <div className="space-y-2">
+                      {items.map((ex) => (
+                        <div
+                          key={ex._id}
+                          className="flex items-center justify-between p-2 bg-card border border-border/60 hover:border-accent/40 rounded transition-all gap-3"
+                        >
+                          <div className="flex items-center gap-3 min-w-0">
+                            {/* Lazy-loaded Hover-to-Play GIF */}
+                            <LazyGif src={ex.gifUrl} alt={ex.name} />
+                            <div className="min-w-0">
+                              <p className="text-xs font-bold text-off-white truncate">{ex.name}</p>
+                              <p className="text-[8px] text-off-white-muted uppercase mt-0.5">
+                                Equipment: {ex.equipment || 'none'} | Diff: {ex.difficulty || 'medium'}
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="flex gap-1.5 shrink-0">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setValue('name', ex.name);
+                                setSelectedExerciseRef(ex);
+                              }}
+                              className="px-2.5 py-1 border border-border hover:border-accent/40 text-off-white hover:text-accent rounded text-[9px] font-bold uppercase transition-all"
+                            >
+                              Select
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const defaultSets = Array.from({ length: 3 }, () => ({
+                                  weight: 60,
+                                  reps: 10,
+                                  feel: '',
+                                }));
+                                setExercises((prev) => [
+                                  ...prev,
+                                  {
+                                    name: ex.name,
+                                    sets: defaultSets,
+                                    unit: 'kg',
+                                    notes: '',
+                                    gifUrl: ex.gifUrl,
+                                    bodyPart: ex.bodyPart,
+                                  },
+                                ]);
+                              }}
+                              className="px-2.5 py-1 bg-accent text-darkbg hover:bg-accent-dim hover:text-off-white rounded text-[9px] font-bold uppercase transition-all"
+                            >
+                              + Quick Add
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Form to add custom/pre-filled exercises */}
+          <form onSubmit={handleSubmit(onAddExercise)} className="p-4 bg-card border border-border rounded space-y-3 font-mono text-xs">
             <div className="flex items-center gap-2 text-accent font-bold uppercase tracking-wider text-[10px]">
               <Plus className="w-3.5 h-3.5" />
               <span>Record Lift Detail</span>
@@ -500,7 +709,7 @@ export const GymTracker: React.FC = () => {
                   {...register('notes')}
                 />
               </div>
-              
+
               <div className="sm:col-span-2">
                 <button
                   type="submit"
@@ -512,31 +721,26 @@ export const GymTracker: React.FC = () => {
             </div>
           </form>
 
-          {/* Exercise Log Grid */}
-          <div className="border border-border rounded overflow-hidden">
-            <div className="grid grid-cols-12 gap-2 bg-card border-b border-border px-4 py-2 font-mono text-[10px] uppercase text-off-white-muted font-bold">
-              <div className="col-span-5">Exercise Lift</div>
-              <div className="col-span-3 text-center">Sets &times; Reps</div>
-              <div className="col-span-3 text-right">Weight</div>
-              <div className="col-span-1"></div>
-            </div>
-
-            <div className="divide-y divide-border">
-              {exercises.length === 0 ? (
-                <div className="py-12 text-center text-xs font-mono text-off-white-muted">
-                  No lifts recorded today. Enter exercise details above to build your session.
-                </div>
-              ) : (
-                exercises.map((ex, idx) => (
-                  <ExerciseCard
-                    key={ex._id || idx}
-                    ex={ex}
-                    index={idx}
-                    onRemove={handleRemoveExercise}
-                  />
-                ))
-              )}
-            </div>
+          {/* Evolved Structured Exercise Log Card List */}
+          <div className="space-y-4 pt-2">
+            {exercises.length === 0 ? (
+              <div className="py-12 border border-dashed border-border rounded text-center text-xs font-mono text-off-white-muted uppercase">
+                No lifts recorded today. Enter exercise details above to build your session.
+              </div>
+            ) : (
+              exercises.map((ex, idx) => (
+                <ExerciseCard
+                  key={ex._id || idx}
+                  ex={ex}
+                  index={idx}
+                  onRemove={handleRemoveExercise}
+                  onUpdateSet={handleUpdateSet}
+                  onAddSet={handleAddSet}
+                  onRemoveSet={handleRemoveSet}
+                  onUpdateNotes={handleUpdateNotes}
+                />
+              ))
+            )}
           </div>
         </div>
 
@@ -566,7 +770,9 @@ export const GymTracker: React.FC = () => {
                   {previousSession.exercises.map((ex, idx) => (
                     <div key={idx} className="flex justify-between items-center text-off-white-muted">
                       <span className="truncate max-w-[150px]">{ex.name}</span>
-                      <span>{ex.sets}x{ex.reps} @ {ex.weight} {ex.unit}</span>
+                      <span>
+                        {ex.sets.length} sets @ {ex.sets[0]?.weight || 0} {ex.unit}
+                      </span>
                     </div>
                   ))}
                 </div>
@@ -628,13 +834,15 @@ export const GymTracker: React.FC = () => {
                               {isExpanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
                             </div>
                           </button>
-                          
+
                           {isExpanded && (
                             <div className="p-2.5 bg-darkbg space-y-1.5 border-t border-border animate-fade-in text-[9px] text-off-white-muted">
                               {s.exercises.map((ex, idx) => (
                                 <div key={idx} className="flex justify-between">
                                   <span>{ex.name}</span>
-                                  <span>{ex.sets}x{ex.reps} @ {ex.weight} {ex.unit}</span>
+                                  <span>
+                                    {ex.sets.length} sets @ {ex.sets[0]?.weight || 0} {ex.unit}
+                                  </span>
                                 </div>
                               ))}
                               {s.notes && (
@@ -649,6 +857,8 @@ export const GymTracker: React.FC = () => {
                                     setExercises(s.exercises || []);
                                     setDuration(s.durationMinutes || 0);
                                     setSessionNotes(s.notes || '');
+                                    setSplit(s.split || '');
+                                    setBodyWeight(s.bodyWeight || '');
                                   }
                                 }}
                                 className="w-full mt-2 py-1 bg-card border border-border/55 hover:border-accent/40 text-[8px] hover:text-accent rounded uppercase text-center font-bold flex items-center justify-center gap-1 transition-all"
@@ -675,79 +885,11 @@ export const GymTracker: React.FC = () => {
             <Flame className="w-4 h-4 animate-pulse" />
             <h3 className="font-mono text-xs font-bold uppercase tracking-wider">Motivation Module</h3>
           </div>
-          
+
           <div className="space-y-3">
-            {/* Curated Motivating Line */}
             <p className="text-xs font-mono italic leading-relaxed text-off-white">
               "Discipline is choosing between what you want now and what you want most. Focus on the gains, crush the reps!"
             </p>
-          </div>
-        </div>
-
-        <div className="bg-panel border border-border rounded-lg p-5 space-y-5">
-          <div className="flex items-center gap-2 border-b border-border pb-3">
-            <PieChart className="w-4 h-4 text-accent" />
-            <h3 className="font-mono text-xs font-bold uppercase tracking-wider text-off-white">Training Analytics (Week)</h3>
-          </div>
-
-          {/* Stat 1: Days Trained */}
-          <div className="p-4 bg-card border border-border rounded flex items-center justify-between">
-            <div className="flex flex-col">
-              <span className="text-[9px] font-mono uppercase tracking-wider text-off-white-muted">Days Active</span>
-              <span className="text-lg font-mono font-bold text-off-white">
-                {gymSessionsThisWeekCount} <span className="text-xs text-off-white-muted">/ 7</span>
-              </span>
-            </div>
-            <div className="p-2 rounded bg-emerald-500/10 border border-emerald-500/20 text-emerald-400">
-              <Flame className="w-5 h-5" />
-            </div>
-          </div>
-
-          {/* Stat 2: Total Volume */}
-          <div className="p-4 bg-card border border-border rounded flex items-center justify-between">
-            <div className="flex flex-col">
-              <span className="text-[9px] font-mono uppercase tracking-wider text-off-white-muted">Total Volume</span>
-              <span className="text-lg font-mono font-bold text-off-white">
-                {Math.round(weeklyVolumeKg)} <span className="text-xs text-off-white-muted">kg</span>
-              </span>
-            </div>
-            <div className="p-2 rounded bg-accent/10 border border-accent/20 text-accent">
-              <Award className="w-5 h-5" />
-            </div>
-          </div>
-
-          {/* Muscle Group Frequency Tags */}
-          <div className="space-y-2">
-            <span className="text-[9px] font-mono uppercase tracking-wider text-off-white-muted block">Muscle Group Frequency</span>
-            <div className="space-y-1.5">
-              {Object.keys(muscleGroupFrequencies).length === 0 ? (
-                <div className="text-[10px] font-mono text-off-white-muted py-2">
-                  No volume data this week.
-                </div>
-              ) : (
-                Object.entries(muscleGroupFrequencies)
-                  .sort((a, b) => b[1] - a[1])
-                  .map(([muscle, sets]) => (
-                    <div key={muscle} className="flex items-center justify-between text-[11px] font-mono">
-                      <span className="text-off-white">{muscle}</span>
-                      <div className="flex items-center gap-2 flex-1 mx-3">
-                        <div className="flex-1 h-1.5 bg-darkbg border border-border rounded-full overflow-hidden">
-                          <div
-                            className="h-full bg-accent"
-                            style={{
-                              width: `${Math.min(
-                                (sets / Math.max(...Object.values(muscleGroupFrequencies))) * 100,
-                                100
-                              )}%`,
-                            }}
-                          ></div>
-                        </div>
-                      </div>
-                      <span className="text-off-white-muted font-bold">{sets} sets</span>
-                    </div>
-                  ))
-              )}
-            </div>
           </div>
         </div>
 
@@ -817,6 +959,12 @@ export const GymTracker: React.FC = () => {
             </label>
           </div>
         </div>
+
+        {/* Visual Recharts Analytics Dashboard */}
+        <GymAnalyticsCharts
+          historySessions={historySessions}
+          activeExercises={exercises}
+        />
       </div>
 
       {/* Full View Modal Overlay */}
