@@ -20,6 +20,9 @@ import analyticsRouter from './routes/analytics';
 import stickyNotesRouter from './routes/stickyNotes';
 import skincareRouter from './routes/skincare';
 import focusRouter from './routes/focus';
+import referenceRouter from './routes/reference';
+import path from 'path';
+
 
 dotenv.config();
 
@@ -88,6 +91,14 @@ app.use('/api/v1/analytics', analyticsRouter);
 app.use('/api/v1/sticky-notes', stickyNotesRouter);
 app.use('/api/v1/skincare', skincareRouter);
 app.use('/api/v1/focus', focusRouter);
+
+// Mounting reference routes
+app.use('/api/reference', referenceRouter);
+app.use('/api/v1/reference', referenceRouter);
+
+// Serving static exercise gifs
+app.use('/exercises', express.static(path.join(process.cwd(), 'public/exercises')));
+
 
 // Root route for sanity check
 app.get('/', (req, res) => {
