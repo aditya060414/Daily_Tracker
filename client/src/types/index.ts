@@ -47,14 +47,20 @@ export interface DailyLog {
   createdAt?: string;
 }
 
+export interface GymSet {
+  weight?: number;
+  reps?: number;
+  feel?: string;
+}
+
 export interface GymExercise {
   _id?: string;
   name: string;
-  sets: number;
-  reps: number;
-  weight: number;
+  sets: GymSet[];
   unit: 'kg' | 'lbs';
   notes?: string;
+  gifUrl?: string;
+  bodyPart?: string;
 }
 
 export interface GymSession {
@@ -64,7 +70,10 @@ export interface GymSession {
   durationMinutes: number;
   notes?: string;
   photos?: string[];
+  bodyWeight?: number;
+  split?: string;
 }
+
 
 export type PlanCategoryType = 'work' | 'health' | 'learning' | 'personal' | 'rest' | (string & {});
 
