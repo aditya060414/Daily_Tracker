@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, Outlet, useLocation } from 'react-router-dom';
-import { useAuthStore } from './store';
+import { useAuthStore, useDailyStore, useDateStore } from './store';
 import { authApi } from './api';
 import { Sidebar } from './components/Sidebar';
 import { TopBar } from './components/TopBar';
 import { CommandPalette } from './components/CommandPalette';
 import { StickyNotesLayer } from './components/StickyNotesLayer';
+import { updatePersistentNotification } from './utils/notifications';
 
 // Capacitor Native imports
 import { Capacitor } from '@capacitor/core';
@@ -83,8 +84,26 @@ export const App: React.FC = () => {
   const token = useAuthStore((state) => state.token);
   const setAuth = useAuthStore((state) => state.setAuth);
   const clearAuth = useAuthStore((state) => state.clearAuth);
+  const dailyLog = useDailyStore((state) => state.dailyLog);
+  const selectedDate = useDateStore((state) => state.selectedDate);
+  const notificationPrefs = useAuthStore((state) => state.notificationPrefs);
   const [booting, setBooting] = useState(true);
   const [bootLogs, setBootLogs] = useState<string[]>([]);
+
+  // Real-time synchronization of persistent status bar notification
+  useEffect(() => {
+    if (!Capacitor.isNativePlatform()) return;
+
+    if (isAuthenticated && notificationPrefs?.persistentEnabled) {
+      const remainingTasks = dailyLog ? dailyLog.tasks.filter((t) => !t.completed).length : 0;
+      const completedTasks = dailyLog ? dailyLog.tasks.filter((t) => t.completed).length : 0;
+      const totalTasks = dailyLog ? dailyLog.tasks.length : 0;
+
+      updatePersistentNotification(remainingTasks, completedTasks, totalTasks, true);
+    } else {
+      updatePersistentNotification(0, 0, 0, false);
+    }
+  }, [isAuthenticated, dailyLog, selectedDate, notificationPrefs?.persistentEnabled]);
 
   // Native Platform Initialization (StatusBar, Hardware Back Button)
   useEffect(() => {
