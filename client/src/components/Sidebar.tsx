@@ -13,6 +13,7 @@ import {
   Timer,
   Sparkles,
   Wallet,
+  ClipboardList,
 } from 'lucide-react';
 import { useAuthStore } from '../store';
 
@@ -29,6 +30,7 @@ export const Sidebar: React.FC = () => {
   const navItems = [
     { to: '/', label: 'Overview', icon: <LayoutDashboard className="w-4 h-4" /> },
     { to: '/tasks', label: 'Tasks', icon: <CheckSquare className="w-4 h-4" /> },
+    { to: '/scheduler', label: 'Scheduler', icon: <ClipboardList className="w-4 h-4" /> },
     { to: '/gym', label: 'Gym', icon: <Dumbbell className="w-4 h-4" /> },
     { to: '/plan', label: 'Planning', icon: <Calendar className="w-4 h-4" /> },
     { to: '/focus', label: 'Focus', icon: <Timer className="w-4 h-4" /> },
