@@ -215,3 +215,21 @@ export interface Achievement {
   icon: string;
   unlocked: boolean;
 }
+
+// ─── Task Scheduler ───────────────────────────────────────────────────────────
+
+export type UrgencyGroup = 'overdue' | 'today' | 'this_week' | 'later' | 'completed';
+export type TaskStatus = 'todo' | 'in_progress' | 'done';
+
+export interface ScheduledTask {
+  _id: string;
+  title: string;
+  description?: string;
+  tags: string[];
+  deadline: string; // ISO string — stores full datetime including time
+  status: TaskStatus;
+  urgencyGroup?: UrgencyGroup;
+  createdAt: string;
+  updatedAt: string;
+}
+
