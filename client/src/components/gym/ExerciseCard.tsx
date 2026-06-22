@@ -13,12 +13,7 @@ interface ExerciseCardProps {
 }
 
 const COMMON_FEELS = ['Light', 'Heavy', 'Failure'];
-// Descriptions for each feel option shown on hover
-const FEEL_DESCRIPTIONS: Record<string, string> = {
-  Light: 'Light effort – easy weight or low intensity',
-  Heavy: 'Heavy effort – challenging weight or higher intensity',
-  Failure: 'Failure – reached muscle failure or max effort',
-};
+
 
 export const ExerciseCard: React.FC<ExerciseCardProps> = ({
   ex,
