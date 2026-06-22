@@ -21,6 +21,7 @@ import stickyNotesRouter from './routes/stickyNotes';
 import skincareRouter from './routes/skincare';
 import focusRouter from './routes/focus';
 import referenceRouter from './routes/reference';
+import tasksRouter from './routes/tasks';
 import path from 'path';
 
 
@@ -91,6 +92,7 @@ app.use('/api/v1/analytics', analyticsRouter);
 app.use('/api/v1/sticky-notes', stickyNotesRouter);
 app.use('/api/v1/skincare', skincareRouter);
 app.use('/api/v1/focus', focusRouter);
+app.use('/api/v1/tasks', tasksRouter);
 
 // Mounting reference routes
 app.use('/api/reference', referenceRouter);
