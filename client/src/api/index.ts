@@ -17,6 +17,7 @@ import {
   FocusSession,
   FocusAnalytics,
   Achievement,
+  ScheduledTask,
 } from '../types';
 
 const api = axios.create({
@@ -371,4 +372,26 @@ export const referenceApi = {
     return res.data;
   },
 };
+
+// ─── Task Scheduler API ───────────────────────────────────────────────────────
+
+export const schedulerApi = {
+  getAll: async () => {
+    const res = await api.get<ApiResponse<ScheduledTask[]>>('/tasks');
+    return res.data;
+  },
+  create: async (data: Omit<ScheduledTask, '_id' | 'urgencyGroup' | 'createdAt' | 'updatedAt'>) => {
+    const res = await api.post<ApiResponse<ScheduledTask>>('/tasks', data);
+    return res.data;
+  },
+  update: async (id: string, data: Partial<Omit<ScheduledTask, '_id' | 'urgencyGroup' | 'createdAt' | 'updatedAt'>>) => {
+    const res = await api.patch<ApiResponse<ScheduledTask>>(`/tasks/${id}`, data);
+    return res.data;
+  },
+  delete: async (id: string) => {
+    const res = await api.delete<ApiResponse<{ id: string }>>(`/tasks/${id}`);
+    return res.data;
+  },
+};
+
 
